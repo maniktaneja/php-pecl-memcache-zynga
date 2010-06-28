@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.0.4
+Version:      2.3.0.8
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Mon Jun 28 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.8-1
+- Fixed a crash in get2 when php serialized objects are retrieved
+
 * Fri May 15 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.4-1
 - Fixed an issue with multi-get2 - with mcmux, it used to 
 - return failure even if just one of the keys failed
