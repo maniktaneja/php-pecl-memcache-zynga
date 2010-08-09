@@ -44,7 +44,7 @@ Zynga customization - proxy support added
 
 Memcache can be used as a PHP session handler.
 
-%prep 
+%prep
 %setup -c -q
 %{_bindir}/php -n %{SOURCE2} package.xml >CHANGELOG
 
@@ -79,7 +79,7 @@ extension=%{module_name}.so
 ;memcache.max_failover_attempts=20
 ; Data will be transferred in chunks of this size
 ;memcache.chunk_size=8192
-; The default TCP port number to use when connecting to the memcached server 
+; The default TCP port number to use when connecting to the memcached server
 ;memcache.default_port=11211
 ; Hash function {crc32, fnv}
 ;memcache.hash_function=crc32
@@ -92,7 +92,7 @@ extension=%{module_name}.so
 ;memcache.proxy_enabled=false
 ; Proxy host/ip. For unix domain sockets, use unix://<abs path to socket>
 ;memcache.proxy_host=localhost
-; Proxy port. For unix domain sockets, give 0 
+; Proxy port. For unix domain sockets, give 0
 ;memcache.proxy_port=0
 
 ; Compression level - ignored unless compression threshold is set on the memcache pool
@@ -142,7 +142,7 @@ fi
 
 %files
 %defattr(-, root, root, -)
-%doc CHANGELOG %{pecl_name}-%{version}/CREDITS %{pecl_name}-%{version}/README 
+%doc CHANGELOG %{pecl_name}-%{version}/CREDITS %{pecl_name}-%{version}/README
 %doc %{pecl_name}-%{version}/example.php %{pecl_name}-%{version}/memcache.php
 %config(noreplace) %{_sysconfdir}/php.d/%{module_name}.ini
 %{php_extdir}/%{module_name}.so
@@ -150,11 +150,15 @@ fi
 
 
 %changelog
+* Mon Aug 09 2010 Manik Taneja <mtaneja@zynga.com> 2.3.0.9-1
+- During a multi-get if a connection to the proxy fails, then
+  do not try and open any more connections for that page
+
 * Mon Jun 28 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.8-1
 - Fixed a crash in get2 when php serialized objects are retrieved
 
 * Fri May 15 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.4-1
-- Fixed an issue with multi-get2 - with mcmux, it used to 
+- Fixed an issue with multi-get2 - with mcmux, it used to
 - return failure even if just one of the keys failed
 
 * Sat May 01 2010 Manik Taneja <mtaneja@zynga.com> 2.3.0.2-1
@@ -175,11 +179,11 @@ fi
 - Added a display message for the NOT_FOUND error
 
 * Tue Feb 16 2010 Prashun Purkayastha <ppurkayastha@zynga.com> 2.2.5.4-1
-- Added INI_SET option to retry with "memcache.connection_retry_count" on a 
+- Added INI_SET option to retry with "memcache.connection_retry_count" on a
 - failed set or get operation on a persistent connection
 
 * Wed Nov 18 2009 Jayesh Jose <jjose@zynga.com> 2.2.5.3-1
-- Disabled fall back to direct mc connection 
+- Disabled fall back to direct mc connection
 
 * Thu Oct 29 2009 Jayesh Jose <jjose@zynga.com> 2.2.5-1
 - Zynga version with proxy support
@@ -202,7 +206,7 @@ fi
 * Sat Sep 22 2007 Remi Collet <Fedora@FamilleCollet.com> 2.2.0-1
 - new version
 - add new INI directives (hash_strategy + hash_function) to config
-- add BR on php-devel >= 4.3.11 
+- add BR on php-devel >= 4.3.11
 
 * Mon Aug 20 2007 Remi Collet <Fedora@FamilleCollet.com> 2.1.2-1
 - initial RPM

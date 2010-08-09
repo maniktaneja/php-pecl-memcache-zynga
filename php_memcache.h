@@ -138,7 +138,7 @@ typedef struct mmc_hash {
 
 /* 32 bit magic FNV-1a prime and init */
 #define FNV_32_PRIME 0x01000193
-#define FNV_32_INIT 0x811c9dc5 
+#define FNV_32_INIT 0x811c9dc5
 
 typedef struct mmc_pool {
 	mmc_t					**servers;
@@ -181,6 +181,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	int proxy_hostlen;
 	int connection_retry_count;
 	zend_bool in_multi;
+	zend_bool proxy_connect_failed;
 	mmc_t * temp_proxy_list;
     lzo_align_t __LZO_MMODEL lzo_wmem[ ((LZO1X_1_MEM_COMPRESS) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ];
 ZEND_END_MODULE_GLOBALS(memcache)
@@ -225,7 +226,7 @@ PS_FUNCS(memcache);
 #endif
 
 /* {{{ macros */
-#if ZEND_DEBUG 
+#if ZEND_DEBUG
 
 void mmc_debug(const char *format, ...);
 
