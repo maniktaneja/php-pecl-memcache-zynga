@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.0.8
+Version:      2.3.0.10
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Wed Aug 11 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.10-1
+- Fixed a crash that happens during module_shutdown()
+
 * Mon Aug 09 2010 Manik Taneja <mtaneja@zynga.com> 2.3.0.9-1
 - During a multi-get if a connection to the proxy fails, then
   do not try and open any more connections for that page

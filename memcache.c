@@ -63,14 +63,14 @@ ZEND_BEGIN_ARG_INFO(memcache_get2_arginfo, 0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(1)
-	ZEND_ARG_PASS_INFO(0)
-	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(1)
+	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 ZEND_BEGIN_ARG_INFO(memcache_get2_arginfo1, 0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(1)
-	ZEND_ARG_PASS_INFO(0)
-	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(1)
+	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
 
@@ -530,7 +530,6 @@ static void mmc_server_free(mmc_t *mmc TSRMLS_DC) /* {{{ */
 	mmc->in_free = 1;
 
 	mmc_server_sleep(mmc TSRMLS_CC);
-    mmc_server_disconnect(mmc TSRMLS_CC);
 
 	if (mmc->persistent) {
 		free(mmc->host);
@@ -539,6 +538,9 @@ static void mmc_server_free(mmc_t *mmc TSRMLS_DC) /* {{{ */
 		MEMCACHE_G(num_persistent)--;
 	}
 	else {
+        if (mmc->stream != NULL) {
+            php_stream_close(mmc->stream);
+        }
 		efree(mmc->host);
 		efree(mmc->proxy_str);
 		efree(mmc);
@@ -2761,6 +2763,7 @@ PHP_FUNCTION(memcache_get2)
 
 	zval *tmp;
 	MAKE_STD_ZVAL(tmp);
+	ZVAL_NULL(tmp);
 
 	zend_bool old_false_on_failure = pool->false_on_error;
 	pool->false_on_error = 1;
