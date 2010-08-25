@@ -15,6 +15,8 @@ if ($memcache) {
     $memcache->get($get_array);
     $memcache->get($get_array);
     $memcache->get($get_array);
+
+    $memcache->getl("k1");
     /*
     $memcache->get("k1");
 

@@ -73,6 +73,11 @@ ZEND_BEGIN_ARG_INFO(memcache_get2_arginfo1, 0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
+ZEND_BEGIN_ARG_INFO(memcache_getl_arginfo, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(1)
+	ZEND_ARG_PASS_INFO(1)
+ZEND_END_ARG_INFO();
 
 /* {{{ memcache_functions[]
  */
@@ -88,6 +93,7 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_replace,		NULL)
 	PHP_FE(memcache_get,			NULL)
 	PHP_FE(memcache_get2,			memcache_get2_arginfo)
+	PHP_FE(memcache_getl,			NULL)
 	PHP_FE(memcache_cas,			NULL)
 	PHP_FE(memcache_delete,			NULL)
 	PHP_FE(memcache_debug,			NULL)
@@ -116,6 +122,7 @@ static zend_function_entry php_memcache_class_functions[] = {
 	PHP_FALIAS(replace,			memcache_replace,			NULL)
 	PHP_FALIAS(get,				memcache_get,				NULL)
 	PHP_FALIAS(get2,			memcache_get2,				memcache_get2_arginfo1)
+	PHP_FALIAS(getl,			memcache_getl,				NULL)
 	PHP_FALIAS(cas,				memcache_cas,				NULL)
 	PHP_FALIAS(delete,			memcache_delete,			NULL)
 	PHP_FALIAS(getstats,		memcache_get_stats,			NULL)
@@ -296,6 +303,7 @@ static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsign
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
 static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *, int);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
 static int mmc_incr_decr(mmc_t *, int, char *, int, int, long * TSRMLS_DC);
 static void php_mmc_incr_decr(INTERNAL_FUNCTION_PARAMETERS, int);
@@ -656,6 +664,11 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSR
 		return 0;
 	}
 
+	/* object may be locked, return FALSE without failover */
+	if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", response_len, sizeof("LOCK_ERROR") - 1)) {
+		return 0;
+	}
+
 	mmc_server_received_error(mmc, response_len);
 	return -1;
 }
@@ -764,6 +777,9 @@ mmc_pool_t *mmc_pool_new(TSRMLS_D) /* {{{ */
 	pool->proxy_enabled = MEMCACHE_G(proxy_enabled);
 	pool->false_on_error = MEMCACHE_G(false_on_error);
 
+	ALLOC_INIT_ZVAL(pool->cas_array);
+	array_init(pool->cas_array);
+
 	mmc_pool_init_hash(pool TSRMLS_CC);
 
 	return pool;
@@ -856,6 +872,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	char *request;
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL;
+	int **cas_lookup;
 
 	if (key_len > MMC_KEY_MAX_SIZE) {
 		key = key_copy = estrndup(key, MMC_KEY_MAX_SIZE);
@@ -893,6 +910,17 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		}
 	}
 
+	/*
+	 * if no cas value has been specified, check if we have one stored for this key
+	 */
+
+	if (pool->cas_array) {
+		if (FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1, (void**)&cas_lookup)) {
+			cas = **cas_lookup ;
+			zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
+		}
+	}
+
 	int caslen = (cas != 0)? MAX_LENGTH_OF_LONG + 1: 0;
 
 	request = emalloc(
@@ -913,7 +941,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			);
 
 	if (caslen) {
-		request_len = sprintf(request, "%s %s %d %d %d %lu\r\n", command, key, flags, expire, value_len, cas);
+		request_len = sprintf(request, "cas %s %d %d %d %lu\r\n", key, flags, expire, value_len, cas);
 	} else {
 		request_len = sprintf(request, "%s %s %d %d %d\r\n", command, key, flags, expire, value_len);
 	}
@@ -1459,6 +1487,86 @@ static int mmc_postprocess_value(zval **return_value, char *value, int value_len
 	return 1;
 }
 /* }}} */
+
+int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas, int timeout TSRMLS_DC) /* {{{ */
+{
+	mmc_t *mmc;
+	char *command, *value;
+	int result = -1, command_len, response_len, value_len, flags = 0;
+	unsigned long cas = 0;
+
+	MMC_DEBUG(("mmc_exec_retrieval_cmd: key '%s'", key));
+
+	if (timeout < 0 || timeout > 30)
+		timeout = 15;
+
+	command_len = (timeout) ? spprintf(&command, 0, "getl %s %d", key, timeout):
+									spprintf(&command, 0, "getl %s", key);
+
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+		MMC_DEBUG(("mmc_exec_getl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
+
+		/* send command and read value */
+		if ((result = mmc_sendcmd(mmc, command, command_len TSRMLS_CC)) > 0 &&
+				(result = mmc_read_value(mmc, NULL, NULL, &value, &value_len, &flags, &cas TSRMLS_CC)) >= 0) {
+
+			if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || !mmc_str_left(mmc->inbuf, "END", response_len, sizeof("END")-1)) {
+				mmc_server_seterror(mmc, "Malformed END line", 0);
+				result = -1;
+			}
+			else if (flags & MMC_SERIALIZED) {
+				result = mmc_postprocess_value(return_value, value, value_len TSRMLS_CC);
+			}
+			else if (0 == cas) {
+				/* no lock error, the cas value should never be zero */
+				mmc_server_seterror(mmc, "Invalid cas value", 0);
+				result = -1;
+			} else {
+				ZVAL_STRINGL(*return_value, value, value_len, 0);
+			}
+		}
+
+		if (result < 0) {
+			if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf), sizeof("LOCK_ERROR")-1)) {
+				/* failed to lock */
+				result = 0;
+			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
+				/* key doesn't exist */
+				result = 0;
+			} else {
+			 	mmc_server_failure(mmc TSRMLS_CC);
+			}
+		}
+	}
+
+	if (result == 0) {
+		ZVAL_FALSE(*return_value);
+	}
+
+	/*
+	 * valid cas value and the result is not -1, then store the cas value
+	 * along with the key in the hash table
+	 */
+	if (cas && result != -1) {
+		add_assoc_long_ex(pool->cas_array, (char *) key, key_len + 1, cas);
+	}
+
+
+	if (return_flags != NULL) {
+		zval_dtor(return_flags);
+		ZVAL_LONG(return_flags, flags);
+	}
+
+	if (return_cas != NULL) {
+		zval_dtor(return_cas);
+		ZVAL_LONG(return_cas, cas);
+	}
+
+	efree(command);
+	return result;
+}
+/* }}} */
+
 
 int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas TSRMLS_DC) /* {{{ */
 {
@@ -2787,6 +2895,34 @@ PHP_FUNCTION(memcache_get2)
 	RETURN_TRUE;
 }
 
+/* {{{ proto mixed memcache_get( object memcache, mixed key, [ mixed flag ])
+   Returns the item with a lock on the object for the specified timeout period */
+PHP_FUNCTION(memcache_getl)
+{
+	mmc_pool_t *pool;
+	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
+	char key[MMC_KEY_MAX_SIZE];
+	unsigned int key_len;
+	int timeout = 15;
+
+	if (mmc_object == NULL) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|zz",
+			&mmc_object, memcache_class_entry_ptr, &zkey, &flags, &cas) == FAILURE) {
+			return;
+		}
+	} else {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|zz", &zkey, &flags, &cas) == FAILURE) {
+			return;
+		}
+	}
+
+	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
+		RETURN_FALSE;
+	}
+
+	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
+}
+
 /* {{{ proto mixed memcache_get( object memcache, mixed key [, mixed &flags [, mixed &cas ] ] )
    Returns value of existing item or false */
 PHP_FUNCTION(memcache_get)
@@ -2813,6 +2949,27 @@ PHP_FUNCTION(memcache_get)
 
 	php_mmc_get(pool, zkey, &return_value, NULL, flags, cas);
 }
+
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout) /* {{{ */
+{
+	char key[MMC_KEY_MAX_SIZE];
+	unsigned int key_len;
+
+	if (Z_TYPE_P(zkey) != IS_ARRAY) {
+		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
+			if (mmc_exec_getl_cmd(pool, key, key_len, return_value, flags, cas, timeout TSRMLS_CC) < 0) {
+				zval_dtor(*return_value);
+				ZVAL_FALSE(*return_value);
+			}
+		}
+		else {
+			ZVAL_FALSE(*return_value);
+		}
+	}  else {
+		ZVAL_FALSE(*return_value);
+	}
+}
+
 
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas) /* {{{ */
 {

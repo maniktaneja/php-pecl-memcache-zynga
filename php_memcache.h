@@ -54,6 +54,7 @@ PHP_FUNCTION(memcache_set);
 PHP_FUNCTION(memcache_replace);
 PHP_FUNCTION(memcache_get);
 PHP_FUNCTION(memcache_get2);
+PHP_FUNCTION(memcache_getl);
 PHP_FUNCTION(memcache_cas);
 PHP_FUNCTION(memcache_delete);
 PHP_FUNCTION(memcache_debug);
@@ -151,6 +152,7 @@ typedef struct mmc_pool {
 	mmc_hash_t				*hash;
 	void					*hash_state;
 	zend_bool				false_on_error;
+	zval 					*cas_array;
 } mmc_pool_t;
 
 typedef struct token_s {

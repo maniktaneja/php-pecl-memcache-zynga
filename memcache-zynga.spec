@@ -150,6 +150,10 @@ fi
 
 
 %changelog
+* Wed Aug 25 2010 Manik Taneja <mtaneja@zynga.com> 2.3.1.0-1
+- Implementation of getl(). This function takes the same number
+  of parameters as get(). On success the object is locked for a
+  default period of 15 seconds.
 * Wed Aug 11 2010 Jayesh Jose <jjose@zynga.com> 2.3.0.10-1
 - Fixed a crash that happens during module_shutdown()
 
