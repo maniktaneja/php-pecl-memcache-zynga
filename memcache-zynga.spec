@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.0.10
+Version:      2.3.1.0
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,8 @@ fi
 
 
 %changelog
+* Fri Sep 24 2010 Mark Jaffe <mjaffe@zynga.com> 2.3.1.0-2
+- Match the version string
 * Wed Aug 25 2010 Manik Taneja <mtaneja@zynga.com> 2.3.1.0-1
 - Implementation of getl(). This function takes the same number
   of parameters as get(). On success the object is locked for a
