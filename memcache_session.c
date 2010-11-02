@@ -61,7 +61,7 @@ PS_OPEN_FUNC(memcache)
 
 		if (i < j) {
 			int persistent = 0, weight = 1, timeout = MMC_DEFAULT_TIMEOUT, retry_interval = MMC_DEFAULT_RETRY;
-			
+
 			/* translate unix: into file: */
 			if (!strncmp(save_path+i, "unix:", sizeof("unix:")-1)) {
 				int len = j-i;
@@ -76,15 +76,15 @@ PS_OPEN_FUNC(memcache)
 
 			if (!url) {
 				char *path = estrndup(save_path+i, j-i);
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, 
+				php_error_docref(NULL TSRMLS_CC, E_WARNING,
 					"Failed to parse session.save_path (error at offset %d, url was '%s')", i, path);
 				efree(path);
-				
+
 				mmc_pool_free(pool TSRMLS_CC);
 				PS_SET_MOD_DATA(NULL);
 				return FAILURE;
 			}
-			
+
 			/* parse parameters */
 			if (url->query != NULL) {
 				MAKE_STD_ZVAL(params);
@@ -114,7 +114,7 @@ PS_OPEN_FUNC(memcache)
 
 				zval_ptr_dtor(&params);
 			}
-			
+
 			if (url->scheme && url->path && !strcmp(url->scheme, "file")) {
 				char *host;
 				int host_len = spprintf(&host, 0, "unix://%s", url->path);
@@ -123,14 +123,14 @@ PS_OPEN_FUNC(memcache)
 				if (!strcmp(host + host_len - 2, ":0")) {
 					host_len -= 2;
 				}
-				
+
 				if (persistent) {
-					mmc = mmc_find_persistent(host, host_len, 0, timeout, retry_interval TSRMLS_CC);
+					mmc = mmc_find_persistent(host, host_len, 0, timeout, retry_interval, 0 TSRMLS_CC);
 				}
 				else {
-					mmc = mmc_server_new(host, host_len, 0, 0, timeout, retry_interval TSRMLS_CC);
+					mmc = mmc_server_new(host, host_len, 0, 0, timeout, retry_interval, 0 TSRMLS_CC);
 				}
-				
+
 				efree(host);
 			}
 			else {
@@ -142,10 +142,10 @@ PS_OPEN_FUNC(memcache)
 				}
 
 				if (persistent) {
-					mmc = mmc_find_persistent(url->host, strlen(url->host), url->port, timeout, retry_interval TSRMLS_CC);
+					mmc = mmc_find_persistent(url->host, strlen(url->host), url->port, timeout, retry_interval, 0 TSRMLS_CC);
 				}
 				else {
-					mmc = mmc_server_new(url->host, strlen(url->host), url->port, 0, timeout, retry_interval TSRMLS_CC);
+					mmc = mmc_server_new(url->host, strlen(url->host), url->port, 0, timeout, retry_interval, 0 TSRMLS_CC);
 				}
 			}
 
@@ -219,14 +219,14 @@ PS_WRITE_FUNC(memcache)
 {
 	mmc_pool_t *pool = PS_GET_MOD_DATA();
 
-	if (pool) { 
+	if (pool) {
 		char key_tmp[MMC_KEY_MAX_SIZE];
 		unsigned int key_tmp_len;
 
 		if (mmc_prepare_key_ex(key, strlen(key), key_tmp, &key_tmp_len TSRMLS_CC) != MMC_OK) {
 			return FAILURE;
-		}			
-		
+		}
+
 		if (mmc_pool_store(pool, "set", sizeof("set")-1, key_tmp, key_tmp_len, 0, INI_INT("session.gc_maxlifetime"), 0, val, vallen TSRMLS_CC)) {
 			return SUCCESS;
 		}
@@ -252,7 +252,7 @@ PS_DESTROY_FUNC(memcache)
 		if (mmc_prepare_key_ex(key, strlen(key), key_tmp, &key_tmp_len TSRMLS_CC) != MMC_OK) {
 			return FAILURE;
 		}
-		
+
 		while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len TSRMLS_CC)) != NULL) {
 			if ((result = mmc_delete(mmc, key_tmp, key_tmp_len, 0 TSRMLS_CC)) < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);

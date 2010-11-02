@@ -2,7 +2,7 @@
 
 $memcache = new memcache;
 
-$memcache->addServer("localhost", 11211);
+$memcache->addServer("localhost", 11411);
 
 
 if ($memcache) {

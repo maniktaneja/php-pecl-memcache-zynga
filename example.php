@@ -5,18 +5,22 @@ ini_set("memcache.proxy_host", "localhost:11311");
 
 $memcache = new memcache;
 
-$memcache->addServer("localhost", 11211);
+/*$memcache->addServer("localhost", 11211);*/
 
 
 if ($memcache) {
 
+
+    $memcache->addServer("localhost", 11411, 1, 1, 10, 100, 1, NULL, 1000, true);
+    #$memcache->setproperty("ProtocolBinary", true);
     $get_array = array("k1","k2","k3","k4","k5");
     $memcache->get($get_array);
+    $memcache->setproperty("ProtocolBinary", false);
     $memcache->get($get_array);
     $memcache->get($get_array);
     $memcache->get($get_array);
 
-    $memcache->getl("k1");
+    //$memcache->getl("k1");
     /*
     $memcache->get("k1");
 

@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.1.0
+Version:      2.3.1.1
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,11 @@ fi
 
 
 %changelog
+* Thu Sep 26 2010 (autumn equinox) <mtaneja@zynga.com> 2.3.1.1-1
+- Added setProperty paramter ProtocolBinary (bool) to enable binary protocol
+- Optional paramter to addServer and connect, use_binary to enable binary
+  protocol for a server
+
 * Fri Sep 24 2010 Mark Jaffe <mjaffe@zynga.com> 2.3.1.0-2
 - Match the version string
 * Wed Aug 25 2010 Manik Taneja <mtaneja@zynga.com> 2.3.1.0-1

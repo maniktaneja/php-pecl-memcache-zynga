@@ -69,7 +69,7 @@ static int should_failover(mmc_t *mmc, mmc_t *proxy TSRMLS_DC)
     if (proxy == NULL) {
         failover =  !mmc_open(mmc, 0, NULL, NULL TSRMLS_CC);
     } else if (mmc->status == MMC_STATUS_FAILED) {
-        if (mmc->retry_interval >= 0 && 
+        if (mmc->retry_interval >= 0 &&
             (long)time(NULL) >= mmc->failed + mmc->retry_interval) {
             mmc->status = MMC_STATUS_UNKNOWN;
         } else {
