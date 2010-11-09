@@ -127,13 +127,13 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_set,			NULL)
 	PHP_FE(memcache_setByKey,		NULL)
 	PHP_FE(memcache_setByMultiKey,	NULL)
-	PHP_FE(memcache_replace,		NULL) //TODO6
+	PHP_FE(memcache_replace,		NULL)
 	PHP_FE(memcache_get,			memcache_get_arginfo)
 	PHP_FE(memcache_get2,			memcache_get2_arginfo)
 	PHP_FE(memcache_getl,			memcache_getl_arginfo)
 	PHP_FE(memcache_getByKey,		memcache_getByKey_arginfo)
 	PHP_FE(memcache_getByMultiKey,	NULL)
-	PHP_FE(memcache_cas,			NULL) //TODO7
+	PHP_FE(memcache_cas,			NULL)
 	PHP_FE(memcache_delete,			NULL) //TODO3
 	PHP_FE(memcache_debug,			NULL)
 	PHP_FE(memcache_get_stats,		NULL)
@@ -345,7 +345,7 @@ static int mmc_parse_response(mmc_t *mmc, char *, int, char **, int *, int *, un
 static int mmc_exec_retrieval_cmd_multi(mmc_pool_t *, zval *, zval **, zval **, zval *, zval * TSRMLS_DC);
 static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsigned long * TSRMLS_DC);
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
-static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *, int);
+static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *, int, zend_bool);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
@@ -910,17 +910,22 @@ static int mmc_pool_close(mmc_pool_t *pool TSRMLS_DC) /* disconnects and removes
 }
 /* }}} */
 
-int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long cas, const char *value, int value_len TSRMLS_DC) /* {{{ */
+int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long cas, const char *value, int value_len, zend_bool by_key, const char *shard_key, int shard_key_len TSRMLS_DC) /* {{{ */
 {
 	mmc_t *mmc;
 	char *request;
 	int request_len, result = -1;
-	char *key_copy = NULL, *data = NULL;
+	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	int **cas_lookup;
 
 	if (key_len > MMC_KEY_MAX_SIZE) {
 		key = key_copy = estrndup(key, MMC_KEY_MAX_SIZE);
 		key_len = MMC_KEY_MAX_SIZE;
+	}
+
+	if (by_key && shard_key_len > MMC_KEY_MAX_SIZE) {
+		shard_key = shard_key_copy = estrndup(shard_key, MMC_KEY_MAX_SIZE);
+		shard_key_len = MMC_KEY_MAX_SIZE;
 	}
 
 	/* autocompress large values */
@@ -998,7 +1003,20 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 	request[request_len] = '\0';
 
-	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+	while (result < 0) {
+		if (by_key) {
+			mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC);
+		} else {
+			mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC);
+		}
+
+		if(mmc == NULL) {
+			MMC_DEBUG(("mmc_pool_store: mmc is null"));
+			break;
+		} else {
+			MMC_DEBUG(("mmc_pool_store: mmc is not null"));
+		}
+		
 		if ((result = mmc_server_store(mmc, request, request_len TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
@@ -1006,6 +1024,10 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 	if (key_copy != NULL) {
 		efree(key_copy);
+	}
+
+	if (by_key && shard_key_copy != NULL) {
+		efree(shard_key_copy);
 	}
 
 	if (data != NULL) {
@@ -2246,27 +2268,32 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 }
 /* }}} */
 
-static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int command_len) /* {{{ */
+static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int command_len, zend_bool by_key) /* {{{ */
 {
 	mmc_pool_t *pool;
 	zval *value, *mmc_object = getThis();
 
-	int result, key_len;
+	int result;
+	int key_len;
+	int shard_key_len;
 	char *key;
+	char *shard_key;
 	long flags = 0, expire = 0, cas = 0;
 	char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
+	char shard_key_tmp[MMC_KEY_MAX_SIZE];
+	unsigned int shard_key_tmp_len;
 
 	php_serialize_data_t value_hash;
 	smart_str buf = {0};
 
 	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lll", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flags, &expire, &cas) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flags, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
 			return;
 		}
 	}
 	else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|lll", &key, &key_len, &value, &flags, &expire, &cas) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flags, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
 			return;
 		}
 	}
@@ -2274,6 +2301,14 @@ static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int comma
 	/* If the cas == 0 and the command is 'cas', error */
 	if (cas == 0 && command[0] == 'c') {
 		RETURN_FALSE;
+	}
+
+	// If by key is true then lets validate the input
+	if (by_key) {
+		// Not sure why they validate input like this, but hey... if it works, why not...
+		if (mmc_prepare_key_ex(shard_key, shard_key_len, shard_key_tmp, &shard_key_tmp_len TSRMLS_CC) != MMC_OK) {
+			RETURN_FALSE;
+		}
 	}
 
 	if (mmc_prepare_key_ex(key, key_len, key_tmp, &key_tmp_len TSRMLS_CC) != MMC_OK) {
@@ -2288,7 +2323,7 @@ static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int comma
 		case IS_STRING:
 			result = mmc_pool_store(
 				pool, command, command_len, key_tmp, key_tmp_len, flags, expire, cas,
-				Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC);
+				Z_STRVAL_P(value), Z_STRLEN_P(value), by_key, shard_key_tmp, shard_key_tmp_len TSRMLS_CC);
 			break;
 
 		case IS_LONG:
@@ -2303,7 +2338,7 @@ static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int comma
 
 			result = mmc_pool_store(
 				pool, command, command_len, key_tmp, key_tmp_len, flags, expire, cas,
-				Z_STRVAL(value_copy), Z_STRLEN(value_copy) TSRMLS_CC);
+				Z_STRVAL(value_copy), Z_STRLEN(value_copy), by_key, shard_key_tmp, shard_key_tmp_len TSRMLS_CC);
 
 			zval_dtor(&value_copy);
 			break;
@@ -2333,7 +2368,7 @@ static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *command, int comma
 
 			result = mmc_pool_store(
 				pool, command, command_len, key_tmp, key_tmp_len, flags, expire, cas,
-				buf.c, buf.len TSRMLS_CC);
+				buf.c, buf.len, by_key, shard_key_tmp, shard_key_tmp_len TSRMLS_CC);
 		}
 	}
 	if (flags & MMC_SERIALIZED) {
@@ -2860,7 +2895,7 @@ PHP_FUNCTION(memcache_get_version)
    Adds new item. Item with such key should not exist. */
 PHP_FUNCTION(memcache_add)
 {
-	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "add", sizeof("add") - 1);
+	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "add", sizeof("add") - 1, 0);
 }
 /* }}} */
 
@@ -2868,7 +2903,7 @@ PHP_FUNCTION(memcache_add)
    Sets the value of an item. Item may exist or not */
 PHP_FUNCTION(memcache_set)
 {
-	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "set", sizeof("set") - 1);
+	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "set", sizeof("set") - 1, 0);
 }
 /* }}} */
 
@@ -2876,7 +2911,7 @@ PHP_FUNCTION(memcache_set)
    Sets the value of an item if the CAS value is the same (Compare-And-Swap)  */
 PHP_FUNCTION(memcache_cas)
 {
-	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "cas", sizeof("cas") - 1);
+	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "cas", sizeof("cas") - 1, 0);
 }
 /* }}} */
 
@@ -2884,7 +2919,7 @@ PHP_FUNCTION(memcache_cas)
    Replaces existing item. Returns false if item doesn't exist */
 PHP_FUNCTION(memcache_replace)
 {
-	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "replace", sizeof("replace") - 1);
+	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "replace", sizeof("replace") - 1, 0);
 }
 /* }}} */
 
@@ -2939,6 +2974,7 @@ PHP_FUNCTION(memcache_get2)
 
 PHP_FUNCTION(memcache_setByKey)
 {
+	php_mmc_store(INTERNAL_FUNCTION_PARAM_PASSTHRU, "set", sizeof("set") - 1, 1);
 }
 
 PHP_FUNCTION(memcache_setByMultiKey)
