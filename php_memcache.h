@@ -51,10 +51,14 @@ PHP_FUNCTION(memcache_get_server_status);
 PHP_FUNCTION(memcache_get_version);
 PHP_FUNCTION(memcache_add);
 PHP_FUNCTION(memcache_set);
+PHP_FUNCTION(memcache_setByKey);
+PHP_FUNCTION(memcache_setByMultiKey);
 PHP_FUNCTION(memcache_replace);
 PHP_FUNCTION(memcache_get);
 PHP_FUNCTION(memcache_get2);
 PHP_FUNCTION(memcache_getl);
+PHP_FUNCTION(memcache_getByKey);
+PHP_FUNCTION(memcache_getByMultiKey);
 PHP_FUNCTION(memcache_cas);
 PHP_FUNCTION(memcache_delete);
 PHP_FUNCTION(memcache_debug);
@@ -209,10 +213,11 @@ void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
 int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
+int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags, zval *return_cas TSRMLS_DC);
+void php_mmc_get_by_multikey(mmc_pool_t *pool, zval *zkey_array, zval **return_value TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
-
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
@@ -241,6 +246,7 @@ void mmc_debug(const char *format, ...);
 
 #define MMC_DEBUG(info) \
 {\
+	mmc_debug info; \
 }\
 
 #endif
