@@ -90,23 +90,6 @@ ZEND_BEGIN_ARG_INFO(getByKey_arginfo, 0)
 	ZEND_ARG_PASS_INFO(1) // cas = check and set
 ZEND_END_ARG_INFO();
 
-// Parameter requirements for memcache_getByKey_arginfo
-/*
-ZEND_BEGIN_ARG_INFO(memcache_getByMultiKey_arginfo, 0)
-	ZEND_ARG_PASS_INFO(0) // mmcobject
-	ZEND_ARG_PASS_INFO(0) // key -> shardKey array
-	ZEND_ARG_PASS_INFO(1) // value
-	ZEND_ARG_PASS_INFO(1) // flags
-	ZEND_ARG_PASS_INFO(1) // cas = check and set
-ZEND_END_ARG_INFO();
-ZEND_BEGIN_ARG_INFO(getByMultiKey_arginfo, 0)
-	ZEND_ARG_PASS_INFO(0) // key -> shardKey array
-	ZEND_ARG_PASS_INFO(1) // value
-	ZEND_ARG_PASS_INFO(1) // flags
-	ZEND_ARG_PASS_INFO(1) // cas = check and set
-ZEND_END_ARG_INFO();
-*/
-
 /* {{{ memcache_functions[]
  */
 zend_function_entry memcache_functions[] = {
