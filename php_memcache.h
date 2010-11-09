@@ -45,6 +45,7 @@ PHP_MINFO_FUNCTION(memcache);
 
 PHP_FUNCTION(memcache_connect);
 PHP_FUNCTION(memcache_pconnect);
+PHP_FUNCTION(memcache_bconnect);
 PHP_FUNCTION(memcache_add_server);
 PHP_FUNCTION(memcache_set_server_params);
 PHP_FUNCTION(memcache_get_server_status);
@@ -199,8 +200,8 @@ ZEND_END_MODULE_GLOBALS(memcache)
 #endif
 
 /* internal functions */
-mmc_t *mmc_server_new(char *, int, unsigned short, int, int, int TSRMLS_DC);
-mmc_t *mmc_find_persistent(char *, int, int, int, int TSRMLS_DC);
+mmc_t *mmc_server_new(char *, int, unsigned short, int, int, int, int TSRMLS_DC);
+mmc_t *mmc_find_persistent(char *, int, int, int, int, int TSRMLS_DC);
 int mmc_server_failure(mmc_t * TSRMLS_DC);
 void mmc_server_deactivate(mmc_t * TSRMLS_DC);
 
