@@ -1545,7 +1545,18 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 			}
 		}
 
-		if (result < 0) {
+		if (result == -2) {
+			/* consume unread data in buffer */
+			if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
+					!mmc_str_left(mmc->inbuf, "END", response_len, sizeof("END")-1)) {
+
+				mmc_server_seterror(mmc, "Malformed END line", 0);
+				result = -1;
+				mmc_readline(mmc TSRMLS_CC);
+			} else {
+				result = 0;
+			}
+		} else if (result < 0) {
 			if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf), sizeof("LOCK_ERROR")-1)) {
 				/* failed to lock */
 				result = 0;
@@ -1628,7 +1639,19 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 			}
 		}
 
-		if (result < 0) {
+		if (result == -2) {
+			/* failed to uncompress or unserialize */
+			if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
+				!mmc_str_left(mmc->inbuf, "END", response_len, sizeof("END")-1)) {
+
+				mmc_server_seterror(mmc, "Malformed END line", 0);
+				result = -1;
+			} else {
+				ZVAL_FALSE(*return_value);
+				result = 0;
+			}
+		}
+		else if (result < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
 	}
@@ -1716,6 +1739,7 @@ static int mmc_exec_retrieval_cmd_multi(
 
 	int	i = 0, j, num_requests, result, result_status, result_key_len, value_len, flags;
 	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
+	mmc_queue_t serialized_key = {0};	/* pointers to corresponding keys */
 
 	array_init(*return_value);
 
@@ -1790,8 +1814,14 @@ static int mmc_exec_retrieval_cmd_multi(
 		/* third pass to read responses */
 		for (j=0; j<num_requests; j++) {
 			if (pool->requests[j]->status != MMC_STATUS_FAILED) {
-				for (value = NULL; (result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, pcas TSRMLS_CC)) > 0; value = NULL) {
-					if (flags & MMC_SERIALIZED) {
+				for (value = NULL; (result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, pcas TSRMLS_CC)) > 0 || result == -2; value = NULL) {
+
+					int free_key = 0;
+					if (result == -2) {
+						/* uncompression failed */
+						add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
+					}
+					else if (flags & MMC_SERIALIZED) {
 						zval *result;
 						MAKE_STD_ZVAL(result);
 						ZVAL_STRINGL(result, value, value_len, 0);
@@ -1799,6 +1829,8 @@ static int mmc_exec_retrieval_cmd_multi(
 						/* don't store duplicate values */
 						if (zend_hash_add(Z_ARRVAL_PP(return_value), result_key, result_key_len + 1, &result, sizeof(result), NULL) == SUCCESS) {
 							mmc_queue_push(&serialized, result);
+							mmc_queue_push(&serialized_key, result_key);
+							free_key = 0;
 						}
 						else {
 							zval_ptr_dtor(&result);
@@ -1816,7 +1848,8 @@ static int mmc_exec_retrieval_cmd_multi(
 						add_assoc_long_ex(return_cas, result_key, result_key_len + 1, cas);
 					}
 
-					efree(result_key);
+					if (free_key)
+						efree(result_key);
 				}
 
 				/* check for server failure */
@@ -1842,12 +1875,19 @@ static int mmc_exec_retrieval_cmd_multi(
 	/* post-process serialized values */
 	if (serialized.len) {
 		zval *value;
+		char *key;
 
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
-			mmc_postprocess_value(&value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC);
+			key = (zval *)mmc_queue_pop(&serialized_key);
+			if (result = mmc_postprocess_value(&value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+				/* unserialize failed */
+				add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
+			}
+			efree(key);
 		}
 
 		mmc_queue_free(&serialized);
+		mmc_queue_free(&serialized_key);
 	}
 
 	mmc_free_multi(TSRMLS_C);
@@ -1897,12 +1937,9 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
     if (!memcache_lzo_enabled && (*flags & MMC_COMPRESSED_LZO) && data_len > 0) {
 		mmc_server_seterror(mmc, "Failed to uncompress data - lzo init failed", 0);
-		if (key) {
-			efree(*key);
-		}
 		efree(data);
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data - lzo init failed");
-		return -1;
+		return -2;
 	}
 
 	if (((*flags & MMC_COMPRESSED) || (*flags & MMC_COMPRESSED_LZO)) && data_len > 0) {
@@ -1911,12 +1948,9 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		if (!mmc_uncompress(&result_data, &result_len, data, data_len, *flags)) {
 			mmc_server_seterror(mmc, "Failed to uncompress data", 0);
-			if (key) {
-				efree(*key);
-			}
 			efree(data);
 			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data");
-			return -1;
+			return -2;
 		}
 
 		efree(data);

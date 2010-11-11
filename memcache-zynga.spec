@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.1.1
+Version:      2.3.1.2
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,11 @@ fi
 
 
 %changelog
+* Wed Nov 10 2010 <mtaneja@zynga.com> 2.3.1.2-1
+- In uncompression or unserialization fails do not deactivate the server.
+  Return and log error only.
+- In case of multiget indicate failure of the keys that failed to uncompress/
+  unserialize in the returned status array.
 * Thu Sep 26 2010 (autumn equinox) <mtaneja@zynga.com> 2.3.1.1-1
 - Added setProperty paramter ProtocolBinary (bool) to enable binary protocol
 - Optional paramter to addServer and connect, use_binary to enable binary
