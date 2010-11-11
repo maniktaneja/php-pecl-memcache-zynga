@@ -11,18 +11,20 @@ $memcache->addServer("localhost2", 11211);
 $memcache->addServer("localhost3", 11211);
 $memcache->addServer("localhost4", 11211);
 
-if($memcache) {
-	$values = array();
+if ($memcache) {
 	$keys = array(
-	"foo" => "123",
-	"test" => "123",
-	"brent" => "567"
+		"foo" => "foo",
+		"foo1" => "123",
+		"foo2" => "123",
+		"foo3" => "123",
+		"foo4" => "123"
 	);
 
-        $status = $memcache->getByMultiKey($keys);
+	echo "keys " . print_r($keys, true);
 
-	echo "status ". print_r($status, true);
-        echo "keys ". print_r($keys, true);
+	$result = $memcache->deleteMultiByKey($keys);
+
+	echo "result " . print_r($result, true);
 } else {
 	echo "Connection failed\n";
 }

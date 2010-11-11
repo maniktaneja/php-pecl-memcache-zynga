@@ -12,17 +12,17 @@ $memcache->addServer("localhost3", 11211);
 $memcache->addServer("localhost4", 11211);
 
 if ($memcache) {
-	$key = "foo";
-	$test = $memcache->get($key);
-	echo "key '$key' result '$test' \n";
+	$values = array();
+	$keys = array(
+		"foo" => "123",
+		"test" => "123",
+		"brent" => "567"
+	);
 
-	$key = "123";
-	$test = $memcache->get($key);
-	echo "key '$key' result '$test' \n";
+	$status = $memcache->getMultiByKey($keys);
 
-	$key = "fa;dfa;dfa;sdf;safoo";
-	$test = $memcache->get($key);
-	echo "key '$key' result '$test' \n";
+	echo "status " . print_r($status, true);
+	echo "keys " . print_r($keys, true);
 } else {
 	echo "Connection failed\n";
 }
