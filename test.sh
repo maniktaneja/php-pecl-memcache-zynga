@@ -10,6 +10,18 @@ php setByKey.php
 echo ""
 echo "---------------------------------------------------"
 
+echo "----------------- incrementByKey.php --------------------"
+echo ""
+php incByKey.php
+echo ""
+echo "---------------------------------------------------"
+
+echo "----------------- decrementByKey.php --------------------"
+echo ""
+php decByKey.php
+echo ""
+echo "---------------------------------------------------"
+
 echo "----------------- setMultiByKey.php --------------------"
 echo ""
 php setMultiByKey.php

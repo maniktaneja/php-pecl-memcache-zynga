@@ -76,6 +76,8 @@ PHP_FUNCTION(memcache_get_extended_stats);
 PHP_FUNCTION(memcache_set_compress_threshold);
 PHP_FUNCTION(memcache_increment);
 PHP_FUNCTION(memcache_decrement);
+PHP_FUNCTION(memcache_incrementByKey);
+PHP_FUNCTION(memcache_decrementByKey);
 PHP_FUNCTION(memcache_close);
 PHP_FUNCTION(memcache_flush);
 PHP_FUNCTION(memcache_setoptimeout);
