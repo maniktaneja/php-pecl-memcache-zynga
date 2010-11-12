@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.1.2
+Version:      2.4.0.0
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Wed Nov 12 2010 <bryan@zynga.com> 2.4.0.0-1
+- Added all of the ByKey operations allowing you to pass in a separate shard
+  key for identifying the memcache node where the operation will be performed
 * Wed Nov 10 2010 <mtaneja@zynga.com> 2.3.1.2-1
 - In uncompression or unserialization fails do not deactivate the server.
   Return and log error only.
