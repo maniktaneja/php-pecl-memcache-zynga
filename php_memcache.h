@@ -260,7 +260,6 @@ void mmc_debug(const char *format, ...);
 
 #define MMC_DEBUG(info) \
 {\
-	mmc_debug info; \
 }\
 
 #endif

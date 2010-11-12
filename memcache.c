@@ -336,7 +336,7 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("memcache.chunk_size",		"8192",		PHP_INI_ALL, OnUpdateChunkSize,	chunk_size,		zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.hash_strategy",		"standard",	PHP_INI_ALL, OnUpdateHashStrategy,	hash_strategy,	zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.hash_function",		"crc32",	PHP_INI_ALL, OnUpdateHashFunction,	hash_function,	zend_memcache_globals,	memcache_globals)
-	STD_PHP_INI_ENTRY("memcache.default_timeout_ms",	"15000",	PHP_INI_ALL, OnUpdateDefaultTimeout,	default_timeout_ms,	zend_memcache_globals,	memcache_globals)
+	STD_PHP_INI_ENTRY("memcache.default_timeout_ms",	"10000",	PHP_INI_ALL, OnUpdateDefaultTimeout,	default_timeout_ms,	zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.compression_level",	"0",	PHP_INI_ALL, OnUpdateCompressionLevel,	compression_level,	zend_memcache_globals,	memcache_globals)
    STD_PHP_INI_ENTRY("memcache.tcp_nodelay",       "1",        PHP_INI_ALL, OnUpdateBool, tcp_nodelay,     zend_memcache_globals,  memcache_globals)
    STD_PHP_INI_ENTRY("memcache.null_on_keymiss",     "0",    PHP_INI_ALL, OnUpdateBool,  false_on_error,  zend_memcache_globals,  memcache_globals)
@@ -477,6 +477,7 @@ PHP_MINFO_FUNCTION(memcache)
    internal functions
    ------------------ */
 
+#ifdef ZEND_DEBUG
 void mmc_debug(const char *format, ...) /* {{{ */
 {
 	TSRMLS_FETCH();
@@ -493,7 +494,6 @@ void mmc_debug(const char *format, ...) /* {{{ */
 	}
 }
 /* }}} */
-#ifdef ZEND_DEBUG
 #endif
 
 static struct timeval _convert_timeoutms_to_ts(long msecs) /* {{{ */
