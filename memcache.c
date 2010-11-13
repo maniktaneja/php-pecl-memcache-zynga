@@ -89,10 +89,12 @@ ZEND_END_ARG_INFO();
 ZEND_BEGIN_ARG_INFO(memcache_getl_arginfo, 0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
 ZEND_BEGIN_ARG_INFO(memcache_getl_arginfo1, 0)
+	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
@@ -931,9 +933,10 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 	/*
 	 * if no cas value has been specified, check if we have one stored for this key
+	 * only set operations will be converted to cas
 	 */
 
-	if (pool->cas_array) {
+	if (pool->cas_array && command[0] == 's') {
 		if (FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1, (void**)&cas_lookup)) {
 			cas = **cas_lookup ;
 			zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
@@ -1559,6 +1562,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 		} else if (result < 0) {
 			if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf), sizeof("LOCK_ERROR")-1)) {
 				/* failed to lock */
+				ZVAL_FALSE(*return_value);
 				result = 0;
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
 				/* key doesn't exist */
@@ -1569,8 +1573,8 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 		}
 	}
 
-	if (result == 0) {
-		ZVAL_FALSE(*return_value);
+	if (result == 0 && (Z_TYPE_P(*return_value) != IS_BOOL)) {
+		ZVAL_NULL(*return_value);
 	}
 
 	/*
@@ -1994,6 +1998,11 @@ int mmc_delete(mmc_t *mmc, const char *key, int key_len, int time TSRMLS_DC) /* 
 		return 0;
 	}
 
+	if(mmc_str(mmc->inbuf, "temporary failure", response_len, sizeof("temporary failure") - 1)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to delete temporary failure. Item may be locked");
+		return 0;
+	}
+
 	mmc_server_received_error(mmc, response_len);
 	return -1;
 }
@@ -2243,8 +2252,10 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 	} else if (mmc_str(mmc->inbuf, "non-numeric value", response_len, sizeof("non-numeric value") - 1)) {
 		MMC_DEBUG(("failed to %sement variable - item is non numeric value", cmd > 0 ? "incr" : "decr"));
 		return 0;
-	}
-	else if (mmc_str_left(mmc->inbuf, "ERROR", response_len, sizeof("ERROR") - 1) ||
+	} else if (mmc_str(mmc->inbuf, "temporary failure", response_len, sizeof("temporary failure") - 1)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to incr/decr, temporary failure. Item may be locked");
+		return 0;
+	} else if (mmc_str_left(mmc->inbuf, "ERROR", response_len, sizeof("ERROR") - 1) ||
 			 mmc_str_left(mmc->inbuf, "CLIENT_ERROR", response_len, sizeof("CLIENT_ERROR") - 1) ||
 			 mmc_str_left(mmc->inbuf, "SERVER_ERROR", response_len, sizeof("SERVER_ERROR") - 1)) {
 		mmc_server_received_error(mmc, response_len);
@@ -2951,7 +2962,7 @@ PHP_FUNCTION(memcache_get2)
 	RETURN_TRUE;
 }
 
-/* {{{ proto mixed memcache_getl( object memcache, mixed key, [ mixed &flag ])
+/* {{{ proto mixed memcache_getl( object memcache, mixed key, [int timeout], [ mixed &flag ])
    Returns the item with a lock on the object for the specified timeout period */
 PHP_FUNCTION(memcache_getl)
 {
@@ -2962,12 +2973,12 @@ PHP_FUNCTION(memcache_getl)
 	int timeout = 15;
 
 	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|zz",
-			&mmc_object, memcache_class_entry_ptr, &zkey, &flags, &cas) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|lz",
+			&mmc_object, memcache_class_entry_ptr, &zkey, &flags, &timeout, &cas) == FAILURE) {
 			return;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|zz", &zkey, &flags, &cas) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|lz", &zkey, &timeout, &flags, &cas) == FAILURE) {
 			return;
 		}
 	}
