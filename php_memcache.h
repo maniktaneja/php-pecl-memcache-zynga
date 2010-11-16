@@ -226,7 +226,7 @@ int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
 int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags, zval *return_cas TSRMLS_DC);
 void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **return_value TSRMLS_DC);
-void php_mmc_cmd_multi_by_key(zval * mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value TSRMLS_DC);
+void php_mmc_store_multi_by_key(zval * mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value TSRMLS_DC);
 int php_mmc_delete_by_key(mmc_pool_t *pool, char *key, int key_len, char *shard_key, int shard_key_len, int time TSRMLS_DC);
 void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int time, zval **return_value TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);

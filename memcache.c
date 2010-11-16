@@ -367,6 +367,7 @@ static int mmc_parse_response(mmc_t *mmc, char *, int, char **, int *, int *, un
 static int mmc_exec_retrieval_cmd_multi(mmc_pool_t *, zval *, zval **, zval **, zval *, zval * TSRMLS_DC);
 static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsigned long * TSRMLS_DC);
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
+static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key);
 static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, long cas, char *shard_key, int shard_key_len, char *, int, zend_bool);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
@@ -1038,8 +1039,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		if(mmc == NULL) {
 			MMC_DEBUG(("mmc_pool_store: mmc is null"));
 			break;
-		} else {
-			MMC_DEBUG(("mmc_pool_store: mmc is not null"));
 		}
 
 		MMC_DEBUG(("mmc_pool_store: Sending request '%s'", request));
@@ -2932,10 +2931,7 @@ PHP_FUNCTION(memcache_get_version)
 }
 /* }}} */
 
-/* {{{ proto bool memcache_add( object memcache, string key, mixed var [, int flag [, int expire ] ] )
-   Adds new item. Item with such key should not exist. */
-PHP_FUNCTION(memcache_add)
-{
+php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key) {
 	zval *value;
 	zval *mmc_object = getThis();
 	int key_len;
@@ -2956,11 +2952,20 @@ PHP_FUNCTION(memcache_add)
 		}
 	}
 
-	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "add", sizeof("add") - 1, 0)) {
+	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, command, command_len, by_key)) {
 		RETURN_TRUE;
 	} else {
 		RETURN_FALSE;
 	}
+
+	return;
+}
+
+/* {{{ proto bool memcache_add( object memcache, string key, mixed var [, int flag [, int expire ] ] )
+   Adds new item. Item with such key should not exist. */
+PHP_FUNCTION(memcache_add)
+{
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "add", sizeof("add") - 1, 0);
 }
 /* }}} */
 
@@ -2968,31 +2973,7 @@ PHP_FUNCTION(memcache_add)
    Sets the value of an item. Item may exist or not */
 PHP_FUNCTION(memcache_set)
 {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "set", sizeof("set") - 1, 0)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "set", sizeof("set") - 1, 0);
 }
 /* }}} */
 
@@ -3000,31 +2981,7 @@ PHP_FUNCTION(memcache_set)
    Sets the value of an item if the CAS value is the same (Compare-And-Swap)  */
 PHP_FUNCTION(memcache_cas)
 {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "cas", sizeof("cas") - 1, 0)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "cas", sizeof("cas") - 1, 0);
 }
 /* }}} */
 
@@ -3032,31 +2989,7 @@ PHP_FUNCTION(memcache_cas)
    Replaces existing item. Returns false if item doesn't exist */
 PHP_FUNCTION(memcache_replace)
 {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "replace", sizeof("replace") - 1, 0)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "replace", sizeof("replace") - 1, 0);
 }
 /* }}} */
 
@@ -3126,7 +3059,7 @@ PHP_FUNCTION(memcache_setByKey) {
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
 			return;
-		}
+}
 	} else {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
 			return;
@@ -3145,7 +3078,7 @@ PHP_FUNCTION(memcache_setByKey) {
 /**
  * Stores an array of key/values in memcache.  If key already exists then it is overridden.
  *
- * See php_mmc_cmd_multi_by_key method documentation for example inputs and expected return values.
+ * See php_mmc_store_multi_by_key method documentation for example inputs and expected return values.
  */
 PHP_FUNCTION(memcache_setMultiByKey) {
 	zval *zkey_array;
@@ -3164,7 +3097,7 @@ PHP_FUNCTION(memcache_setMultiByKey) {
 	//Validate inputs
 	if (zkey_array != NULL) {
 		if (Z_TYPE_P(zkey_array) == IS_ARRAY) {
-			php_mmc_cmd_multi_by_key(mmc_object, zkey_array, "set", sizeof ("set") - 1, &return_value TSRMLS_CC);
+			php_mmc_store_multi_by_key(mmc_object, zkey_array, "set", sizeof ("set") - 1, &return_value TSRMLS_CC);
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Input was not of expected array type");
 			RETURN_FALSE;
@@ -3182,39 +3115,13 @@ PHP_FUNCTION(memcache_setMultiByKey) {
  * or if there was some other issue storing the key/value in memcache.
  */
 PHP_FUNCTION(memcache_addByKey) {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if (php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "add", sizeof ("add") - 1, 1)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
-
-	return;
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "add", sizeof("add") - 1, 1);
 }
 
 /**
  * Adds an array of key/values in memcache.
  *
- * See php_mmc_cmd_multi_by_key method documentation for example inputs and expected return values.
+ * See php_mmc_store_multi_by_key method documentation for example inputs and expected return values.
  */
 PHP_FUNCTION(memcache_addMultiByKey) {
 	zval *zkey_array;
@@ -3233,7 +3140,7 @@ PHP_FUNCTION(memcache_addMultiByKey) {
 	//Validate inputs
 	if (zkey_array != NULL) {
 		if (Z_TYPE_P(zkey_array) == IS_ARRAY) {
-			php_mmc_cmd_multi_by_key(mmc_object, zkey_array, "add", sizeof ("add") - 1, &return_value TSRMLS_CC);
+			php_mmc_store_multi_by_key(mmc_object, zkey_array, "add", sizeof ("add") - 1, &return_value TSRMLS_CC);
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Input was not of expected array type");
 			RETURN_FALSE;
@@ -3251,39 +3158,13 @@ PHP_FUNCTION(memcache_addMultiByKey) {
  * exist or if there was some other issue storing the key/value in memcache.
  */
 PHP_FUNCTION(memcache_replaceByKey) {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if (php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "replace", sizeof ("replace") - 1, 1)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
-
-	return;
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "replace", sizeof("replace") - 1, 1);
 }
 
 /**
  * Replaces an array of key/values in memcache.
  *
- * See php_mmc_cmd_multi_by_key method documentation for example inputs and expected return values.
+ * See php_mmc_store_multi_by_key method documentation for example inputs and expected return values.
  */
 PHP_FUNCTION(memcache_replaceMultiByKey) {
 	zval *zkey_array;
@@ -3302,7 +3183,7 @@ PHP_FUNCTION(memcache_replaceMultiByKey) {
 	//Validate inputs
 	if (zkey_array != NULL) {
 		if (Z_TYPE_P(zkey_array) == IS_ARRAY) {
-			php_mmc_cmd_multi_by_key(mmc_object, zkey_array, "replace", sizeof ("replace") - 1, &return_value TSRMLS_CC);
+			php_mmc_store_multi_by_key(mmc_object, zkey_array, "replace", sizeof ("replace") - 1, &return_value TSRMLS_CC);
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Input was not of expected array type");
 			RETURN_FALSE;
@@ -3320,39 +3201,13 @@ PHP_FUNCTION(memcache_replaceMultiByKey) {
  * if key doesn't exist or if there was some other issue storing the key/value in memcache.
  */
 PHP_FUNCTION(memcache_casByKey) {
-	zval *value;
-	zval *mmc_object = getThis();
-	int key_len;
-	int shard_key_len;
-	char *key;
-	char *shard_key;
-	long flag = 0;
-	long expire = 0;
-	long cas = 0;
-
-	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llls", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llls", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len) == FAILURE) {
-			return;
-		}
-	}
-
-	if (php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, "cas", sizeof ("cas") - 1, 1)) {
-		RETURN_TRUE;
-	} else {
-		RETURN_FALSE;
-	}
-
-	return;
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "cas", sizeof("cas") - 1, 1);
 }
 
 /**
  * Compre and Swap an array of key/values in memcache.
  *
- * See php_mmc_cmd_multi_by_key method documentation for example inputs and expected return values.
+ * See php_mmc_store_multi_by_key method documentation for example inputs and expected return values.
  */
 PHP_FUNCTION(memcache_casMultiByKey) {
 	zval *zkey_array;
@@ -3371,7 +3226,7 @@ PHP_FUNCTION(memcache_casMultiByKey) {
 	//Validate inputs
 	if (zkey_array != NULL) {
 		if (Z_TYPE_P(zkey_array) == IS_ARRAY) {
-			php_mmc_cmd_multi_by_key(mmc_object, zkey_array, "cas", sizeof ("cas") - 1, &return_value TSRMLS_CC);
+			php_mmc_store_multi_by_key(mmc_object, zkey_array, "cas", sizeof ("cas") - 1, &return_value TSRMLS_CC);
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Input was not of expected array type");
 			RETURN_FALSE;
@@ -3435,8 +3290,8 @@ PHP_FUNCTION(memcache_casMultiByKey) {
  * @return array An associative array of key => status:
  *		status   - The status of true or false depending on whether or not the memcache transaction was successful.
  */
-void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value TSRMLS_DC) {
-	MMC_DEBUG(("php_mmc_cmd_multi_by_key: Entry"));
+void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value TSRMLS_DC) {
+	MMC_DEBUG(("php_mmc_store_multi_by_key: Entry"));
 
 	HashTable *key_hash;
 	int key_array_count = 0;
@@ -3447,7 +3302,7 @@ void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command,
 	key_hash = Z_ARRVAL_P(zkey_array);
 	key_array_count = zend_hash_num_elements(key_hash);
 
-	MMC_DEBUG(("php_mmc_cmd_multi_by_key: The key array passed contains %d elements ", key_array_count));
+	MMC_DEBUG(("php_mmc_store_multi_by_key: The key array passed contains %d elements ", key_array_count));
 
 	// Go through all of the key => value pairs and send the request without waiting for the responses just yet for performance improvements
 	for (zend_hash_internal_pointer_reset(key_hash); zend_hash_has_more_elements(key_hash) == SUCCESS; zend_hash_move_forward(key_hash)) {
@@ -3460,7 +3315,7 @@ void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command,
 		if (zend_hash_get_current_key_ex(key_hash, &input_key, &input_key_len, &idx, 0, NULL) == HASH_KEY_IS_STRING) {
 
 			if (zend_hash_get_current_data(key_hash, (void**) &data) == FAILURE) {
-				MMC_DEBUG(("php_mmc_cmd_multi_by_key: No data for key '%s'", input_key));
+				MMC_DEBUG(("php_mmc_store_multi_by_key: No data for key '%s'", input_key));
 				// Should never actually fail since the key is known to exist.
 				add_assoc_bool(*return_value, input_key, 0);
 				continue;
@@ -3468,7 +3323,7 @@ void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command,
 
 			// Verify that data contains an array
 			if (Z_TYPE_PP(data) == IS_ARRAY) {
-				MMC_DEBUG(("php_mmc_cmd_multi_by_key: Sending command for key '%s'", input_key));
+				MMC_DEBUG(("php_mmc_store_multi_by_key: Sending command for key '%s'", input_key));
 
 				HashTable *value_hash;
 				value_hash = Z_ARRVAL_PP(data);
@@ -3484,48 +3339,48 @@ void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command,
 				zval **zcas;
 
 				if(zend_hash_find(value_hash, "value", sizeof("value"), (void **)&zvalue) == FAILURE) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: value not found"));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: value not found"));
 				} else {
 					if(Z_TYPE_PP(zvalue) == IS_STRING) {
-						MMC_DEBUG(("php_mmc_cmd_multi_by_key: value found '%s'", Z_STRVAL_PP(zvalue)));
+						MMC_DEBUG(("php_mmc_store_multi_by_key: value found '%s'", Z_STRVAL_PP(zvalue)));
 					} else {
-						MMC_DEBUG(("php_mmc_cmd_multi_by_key: value found"));
+						MMC_DEBUG(("php_mmc_store_multi_by_key: value found"));
 					}
 				}
 
 				if(zend_hash_find(value_hash, "shardKey", sizeof("shardKey"), (void **)&zshardKey) == FAILURE) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: shardKey not found"));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: shardKey not found"));
 				} else {
 					mmc_prepare_key(*zshardKey, shard_key, &shard_key_len TSRMLS_CC);
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: shardKey found '%s'", shard_key));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: shardKey found '%s'", shard_key));
 				}
 
 				if(zend_hash_find(value_hash, "flag", sizeof("flag"), (void **)&zflag) == FAILURE) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: flag not found"));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: flag not found"));
 				} else {
 					flag = Z_LVAL_PP(zflag);
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: flag found '%d'", flag));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: flag found '%d'", flag));
 				}
 
 				if(zend_hash_find(value_hash, "expire", sizeof("expire"), (void **)&zexpire) == FAILURE) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: expire not found"));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: expire not found"));
 				} else {
 					expire = Z_LVAL_PP(zexpire);
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: expire found '%d'", expire));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: expire found '%d'", expire));
 				}
 
 				if(zend_hash_find(value_hash, "cas", sizeof("cas"), (void **)&zcas) == FAILURE) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: cas not found"));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: cas not found"));
 				} else {
 					cas = Z_LVAL_PP(zcas);
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: cas found '%lu'", cas));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: cas found '%lu'", cas));
 				}
 
 				if (php_mmc_store(mmc_object, input_key, input_key_len-1, *zvalue, flag, expire, cas, shard_key, shard_key_len, command, command_len, 1)) {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: Command succeeded for key '%s'", input_key));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: Command succeeded for key '%s'", input_key));
 					add_assoc_bool(*return_value, input_key, 1);
 				} else {
-					MMC_DEBUG(("php_mmc_cmd_multi_by_key: Command failed for key '%s'", input_key));
+					MMC_DEBUG(("php_mmc_store_multi_by_key: Command failed for key '%s'", input_key));
 					add_assoc_bool(*return_value, input_key, 0);
 				}
 			} else {
@@ -3537,7 +3392,7 @@ void php_mmc_cmd_multi_by_key(zval *mmc_object, zval *zkey_array, char *command,
 		}
 	}
 
-	MMC_DEBUG(("php_mmc_cmd_multi_by_key: Exit"));
+	MMC_DEBUG(("php_mmc_store_multi_by_key: Exit"));
 }
 
 /**
