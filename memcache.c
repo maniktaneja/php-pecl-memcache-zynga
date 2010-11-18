@@ -51,7 +51,6 @@
 #ifndef ZEND_ENGINE_2
 #define OnUpdateLong OnUpdateInt
 #endif
-
 /* True global resources - no need for thread safety here */
 static int le_memcache_pool, le_pmemcache;
 static zend_class_entry *memcache_class_entry_ptr;
@@ -99,6 +98,16 @@ ZEND_BEGIN_ARG_INFO(memcache_getl_arginfo1, 0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
+ZEND_BEGIN_ARG_INFO(memcache_unlock_arginfo, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+ZEND_END_ARG_INFO();
+
+ZEND_BEGIN_ARG_INFO(memcache_unlock_arginfo1, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+ZEND_END_ARG_INFO();
 
 /* {{{ memcache_functions[]
  */
@@ -115,6 +124,7 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_get,			memcache_get_arginfo)
 	PHP_FE(memcache_get2,			memcache_get2_arginfo)
 	PHP_FE(memcache_getl,			memcache_getl_arginfo)
+	PHP_FE(memcache_unlock,			memcache_unlock_arginfo)
 	PHP_FE(memcache_cas,			NULL)
 	PHP_FE(memcache_delete,			NULL)
 	PHP_FE(memcache_debug,			NULL)
@@ -144,6 +154,7 @@ static zend_function_entry php_memcache_class_functions[] = {
 	PHP_FALIAS(get,				memcache_get,				memcache_get_arginfo1)
 	PHP_FALIAS(get2,			memcache_get2,				memcache_get2_arginfo1)
 	PHP_FALIAS(getl,			memcache_getl,				memcache_getl_arginfo1)
+	PHP_FALIAS(unlock,			memcache_unlock,			memcache_unlock_arginfo1)
 	PHP_FALIAS(cas,				memcache_cas,				NULL)
 	PHP_FALIAS(delete,			memcache_delete,			NULL)
 	PHP_FALIAS(getstats,		memcache_get_stats,			NULL)
@@ -277,11 +288,11 @@ static PHP_INI_MH(OnUpdateCompressionLevel) /* {{{ */
 
 static PHP_INI_MH(OnUpdateProxyHost) /* {{{ */
 {
-    if (new_value != NULL) {
-        MEMCACHE_G(proxy_hostlen) = strlen(new_value);
-       return OnUpdateString(entry, new_value, new_value_length, mh_arg1, mh_arg2, mh_arg3, stage TSRMLS_CC);
-    }
-    return SUCCESS;
+	if (new_value != NULL) {
+		MEMCACHE_G(proxy_hostlen) = strlen(new_value);
+		return OnUpdateString(entry, new_value, new_value_length, mh_arg1, mh_arg2, mh_arg3, stage TSRMLS_CC);
+	}
+	return SUCCESS;
 }
 /* }}} */
 
@@ -325,6 +336,7 @@ static int mmc_flush(mmc_t *, int TSRMLS_DC);
 static void php_mmc_store(INTERNAL_FUNCTION_PARAMETERS, char *, int);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
+static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
 static int mmc_incr_decr(mmc_t *, int, char *, int, int, long * TSRMLS_DC);
 static void php_mmc_incr_decr(INTERNAL_FUNCTION_PARAMETERS, int);
@@ -385,7 +397,7 @@ PHP_MINIT_FUNCTION(memcache)
 #else
 	REGISTER_LONG_CONSTANT("MEMCACHE_HAVE_SESSION", 0, CONST_CS | CONST_PERSISTENT);
 #endif
-    memcache_lzo_enabled = (lzo_init() == LZO_E_OK)? 1: 0;
+	memcache_lzo_enabled = (lzo_init() == LZO_E_OK)? 1: 0;
 	return SUCCESS;
 }
 /* }}} */
@@ -486,9 +498,9 @@ mmc_t *mmc_server_new(char *host, int host_len, unsigned short port, int persist
 	memcpy(mmc->host, host, host_len);
 	mmc->host[host_len] = '\0';
 
-    mmc->proxy_str = pemalloc(4 + host_len + 1 + MAX_LENGTH_OF_LONG + 1, persistent);
-    sprintf(mmc->proxy_str, "%c:%s:%d ", use_binary ? 'B' : 'A', host, port);
-    mmc->proxy_str_len = strlen(mmc->proxy_str);
+	mmc->proxy_str = pemalloc(4 + host_len + 1 + MAX_LENGTH_OF_LONG + 1, persistent);
+	sprintf(mmc->proxy_str, "%c:%s:%d ", use_binary ? 'B' : 'A', host, port);
+	mmc->proxy_str_len = strlen(mmc->proxy_str);
 
 	mmc->port = port;
 	mmc->status = MMC_STATUS_DISCONNECTED;
@@ -567,9 +579,9 @@ static void mmc_server_free(mmc_t *mmc TSRMLS_DC) /* {{{ */
 		MEMCACHE_G(num_persistent)--;
 	}
 	else {
-        if (mmc->stream != NULL) {
-            php_stream_close(mmc->stream);
-        }
+		if (mmc->stream != NULL) {
+		    php_stream_close(mmc->stream);
+		}
 		efree(mmc->host);
 		efree(mmc->proxy_str);
 		efree(mmc);
@@ -611,11 +623,11 @@ static void mmc_server_received_error(mmc_t *mmc, int response_len)  /* {{{ */
 
 int mmc_server_failure(mmc_t *mmc TSRMLS_DC) /*determines if a request should be retried or is a hard network failure {{{ */
 {
-    if (mmc->proxy) {
+	if (mmc->proxy) {
 		mmc_server_disconnect(mmc->proxy TSRMLS_CC);
-	    mmc_server_deactivate(mmc TSRMLS_CC);
-	    return 1;
-    }
+		mmc_server_deactivate(mmc TSRMLS_CC);
+		return 1;
+	}
 
 	switch (mmc->status) {
 		case MMC_STATUS_DISCONNECTED:
@@ -635,17 +647,17 @@ int mmc_server_failure(mmc_t *mmc TSRMLS_DC) /*determines if a request should be
 static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSRMLS_DC) /* {{{ */
 {
 	int response_len;
-    php_stream *stream;
+	php_stream *stream;
 
-    if (mmc->proxy) {
-        stream = mmc->proxy->stream;
-        if (php_stream_write(stream, mmc->proxy_str, mmc->proxy_str_len) != mmc->proxy_str_len) {
-            mmc_server_seterror(mmc, "Failed sending proxy string", 0);
-            return -1;
-        }
-    } else {
-        stream = mmc->stream;
-    }
+	if (mmc->proxy) {
+		stream = mmc->proxy->stream;
+		if (php_stream_write(stream, mmc->proxy_str, mmc->proxy_str_len) != mmc->proxy_str_len) {
+		    mmc_server_seterror(mmc, "Failed sending proxy string", 0);
+		    return -1;
+		}
+	} else {
+		stream = mmc->stream;
+	}
 
 	php_netstream_data_t *sock = (php_netstream_data_t*)stream->abstract;
 
@@ -893,7 +905,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	char *request;
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL;
-	int **cas_lookup;
+	unsigned long **cas_lookup;
 
 	if (key_len > MMC_KEY_MAX_SIZE) {
 		key = key_copy = estrndup(key, MMC_KEY_MAX_SIZE);
@@ -909,7 +921,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO)) {
 		unsigned long data_len;
 
-    	if (!memcache_lzo_enabled) {
+		if (!memcache_lzo_enabled) {
 			flags &= ~MMC_COMPRESSED_LZO;
 			flags |= MMC_COMPRESSED;
 		}
@@ -1008,7 +1020,7 @@ static int mmc_compress(char **result, unsigned long *result_len, const char *da
 		return 0;
 	}
 
-    if (flags & MMC_COMPRESSED) {
+	if (flags & MMC_COMPRESSED) {
 		if (level == 0) level = 6;
 
 		if (level >= 0) {
@@ -1017,13 +1029,13 @@ static int mmc_compress(char **result, unsigned long *result_len, const char *da
 			status = compress((unsigned char *) *result, result_len, (unsigned const char *) data, data_len);
 		}
 	} else {
-    	status = lzo1x_1_compress(data, data_len, *result, result_len, MEMCACHE_G(lzo_wmem));
+		status = lzo1x_1_compress(data, data_len, *result, result_len, MEMCACHE_G(lzo_wmem));
 		switch (status) {
 			case LZO_E_OK: status = Z_OK; break;
 			case LZO_E_OUTPUT_OVERRUN: status = Z_BUF_ERROR; break;
 			default: status = Z_DATA_ERROR;
-        }
-    }
+		}
+	}
 
 	if (status == Z_OK) {
 		*result = erealloc(*result, *result_len + 1);
@@ -1196,9 +1208,9 @@ static int _mmc_open(mmc_t *mmc, char **error_string, int *errnum TSRMLS_DC) /* 
 	php_stream_set_option(mmc->stream, PHP_STREAM_OPTION_WRITE_BUFFER, PHP_STREAM_BUFFER_NONE, NULL);
 	php_stream_set_chunk_size(mmc->stream, MEMCACHE_G(chunk_size));
 
-    int socketd = ((php_netstream_data_t*)mmc->stream->abstract)->socket;
-    int flag = MEMCACHE_G(tcp_nodelay)? 1: 0;
-    setsockopt(socketd, IPPROTO_TCP,  TCP_NODELAY, (void *) &flag, sizeof(int));
+	int socketd = ((php_netstream_data_t*)mmc->stream->abstract)->socket;
+	int flag = MEMCACHE_G(tcp_nodelay)? 1: 0;
+	setsockopt(socketd, IPPROTO_TCP,  TCP_NODELAY, (void *) &flag, sizeof(int));
 
 	mmc->status = MMC_STATUS_CONNECTED;
 
@@ -1315,8 +1327,8 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 	char *response;
 	size_t response_len;
 
-    php_stream *stream = mmc->proxy? mmc->proxy->stream: mmc->stream;
-    if (stream == NULL) {
+	php_stream *stream = mmc->proxy? mmc->proxy->stream: mmc->stream;
+	if (stream == NULL) {
 		mmc_server_seterror(mmc, "Socket is closed", 0);
 		return -1;
 	}
@@ -1382,16 +1394,16 @@ static int mmc_str(char *haystack, char *needle, int haystack_len, int needle_le
 static int mmc_sendcmd(mmc_t *mmc, const char *cmd, int cmdlen TSRMLS_DC) /* {{{ */
 {
 	char *command;
-    int command_len, proxy_len;
-    php_stream *stream;
+	int command_len, proxy_len;
+	php_stream *stream;
 
-    if (mmc->proxy) {
-        stream = mmc->proxy->stream;
-        proxy_len = mmc->proxy_str_len;
-    } else {
-        stream = mmc->stream;
-        proxy_len = 0;
-    }
+	if (mmc->proxy) {
+		stream = mmc->proxy->stream;
+		proxy_len = mmc->proxy_str_len;
+	} else {
+		stream = mmc->stream;
+		proxy_len = 0;
+	}
 
 	php_netstream_data_t *sock = (php_netstream_data_t*)stream->abstract;
 
@@ -1401,13 +1413,13 @@ static int mmc_sendcmd(mmc_t *mmc, const char *cmd, int cmdlen TSRMLS_DC) /* {{{
 
 	MMC_DEBUG(("mmc_sendcmd: sending command '%s'", cmd));
 
-    command = emalloc(proxy_len + cmdlen + sizeof("\r\n"));
-    if (proxy_len) {
-        memcpy(command, mmc->proxy_str, proxy_len);
-    }
-    memcpy(command + proxy_len, cmd, cmdlen);
-    memcpy(command + proxy_len + cmdlen, "\r\n", sizeof("\r\n") - 1);
-    command_len = proxy_len + cmdlen + sizeof("\r\n") - 1;
+	command = emalloc(proxy_len + cmdlen + sizeof("\r\n"));
+	if (proxy_len) {
+		memcpy(command, mmc->proxy_str, proxy_len);
+	}
+	memcpy(command + proxy_len, cmd, cmdlen);
+	memcpy(command + proxy_len + cmdlen, "\r\n", sizeof("\r\n") - 1);
+	command_len = proxy_len + cmdlen + sizeof("\r\n") - 1;
 	command[command_len] = '\0';
 
 	if (mmc->timeoutms > 1) {
@@ -1517,7 +1529,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	int result = -1, command_len, response_len, value_len, flags = 0;
 	unsigned long cas = 0;
 
-	MMC_DEBUG(("mmc_exec_retrieval_cmd: key '%s'", key));
+	MMC_DEBUG(("mmc_exec_getl_cmd: key '%s'", key));
 
 	if (timeout < 0 || timeout > 30)
 		timeout = 15;
@@ -1601,6 +1613,42 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 }
 /* }}} */
 
+int mmc_exec_unl_cmd(mmc_pool_t *pool, const char *key, int key_len, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS) /* {{{ */
+{
+	mmc_t *mmc;
+	char *command, *value;
+	int result = -1, command_len, response_len, value_len, flags = 0;
+
+	MMC_DEBUG(("mmc_exec_unl_cmd: key '%s' cas '%l'", key, cas));
+
+	command_len = spprintf(&command, 0, "unl %s %lu", key, cas);
+
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+		MMC_DEBUG(("mmc_exec_unl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
+		if (mmc_sendcmd(mmc, command, command_len TSRMLS_CC) < 0) {
+			efree(command);
+			return -3;
+		}
+		efree(command);
+
+		if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0){
+			MMC_DEBUG(("failed to read the server's response"));
+			return -2;
+		}
+
+		MMC_DEBUG(("mmc_exec_unl_cmd: server's response is '%s'", mmc->inbuf));
+
+		if(mmc_str_left(mmc->inbuf,"UNLOCKED", response_len, sizeof("UNLOCKED") - 1)) {
+			return 1;
+		}
+
+		mmc_server_received_error(mmc, response_len);
+		return -1;
+	}
+
+	return result;
+}
+/* }}} */
 
 int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas TSRMLS_DC) /* {{{ */
 {
@@ -1904,7 +1952,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 {
 	char *data;
 	int response_len, data_len, i, size;
-    php_stream *stream = mmc->proxy? mmc->proxy->stream: mmc->stream;
+	php_stream *stream = mmc->proxy? mmc->proxy->stream: mmc->stream;
 
 	/* read "VALUE <key> <flags> <bytes> <cas>\r\n" header line */
 	if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0) {
@@ -1939,7 +1987,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 	data[data_len] = '\0';
 
-    if (!memcache_lzo_enabled && (*flags & MMC_COMPRESSED_LZO) && data_len > 0) {
+	if (!memcache_lzo_enabled && (*flags & MMC_COMPRESSED_LZO) && data_len > 0) {
 		mmc_server_seterror(mmc, "Failed to uncompress data - lzo init failed", 0);
 		efree(data);
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data - lzo init failed");
@@ -2443,19 +2491,19 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 	mmc->timeout = timeout;
 	mmc->connect_timeoutms = timeoutms;
 
-    failed = 0;
-    if (MEMCACHE_G(proxy_enabled)) {
-        mmc->proxy = mmc_get_proxy(TSRMLS_C);
-        if (mmc->proxy == NULL) {
-            failed = 1;
-        } else {
-            failed = (mmc_get_version(mmc TSRMLS_CC) == NULL)? 1: 0;
-        }
-    }
+	failed = 0;
+	if (MEMCACHE_G(proxy_enabled)) {
+		mmc->proxy = mmc_get_proxy(TSRMLS_C);
+		if (mmc->proxy == NULL) {
+		    failed = 1;
+		} else {
+		    failed = (mmc_get_version(mmc TSRMLS_CC) == NULL)? 1: 0;
+		}
+	}
 
-    if (!failed && mmc->proxy == NULL) {
-        failed = mmc_open(mmc, 1, &error_string, &errnum TSRMLS_CC)? 0: 1;
-    }
+	if (!failed && mmc->proxy == NULL) {
+		failed = mmc_open(mmc, 1, &error_string, &errnum TSRMLS_CC)? 0: 1;
+	}
 
 	if (failed) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't connect to %s:%ld, %s (%d)", host, port, error_string ? error_string : "Unknown error", errnum);
@@ -2464,9 +2512,9 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 
 		if (!persistent) {
 			mmc_server_free(mmc TSRMLS_CC);
-        } else {
-        	mmc_server_sleep(mmc TSRMLS_CC);
-        }
+		} else {
+			mmc_server_sleep(mmc TSRMLS_CC);
+		}
 
 		if (error_string) {
 			efree(error_string);
@@ -2526,40 +2574,40 @@ static void mmc_free_multi(TSRMLS_D)
 mmc_t *mmc_get_proxy(TSRMLS_D) /* {{{ */
 {
 	char *host, *error_string = NULL;
-    int host_len, timeout = 1000;
-    long port;
-    int errnum = 0;
-    mmc_t *mmc;
+	int host_len, timeout = 1000;
+	long port;
+	int errnum = 0;
+	mmc_t *mmc;
 
-    host = MEMCACHE_G(proxy_host);
-    port = MEMCACHE_G(proxy_port);
-    host_len = MEMCACHE_G(proxy_hostlen);
+	host = MEMCACHE_G(proxy_host);
+	port = MEMCACHE_G(proxy_port);
+	host_len = MEMCACHE_G(proxy_hostlen);
 
-    if (!host) return NULL;
+	if (!host) return NULL;
 
-    if (MEMCACHE_G(in_multi)) {
-	    if (MEMCACHE_G(proxy_connect_failed)) {
+	if (MEMCACHE_G(in_multi)) {
+		if (MEMCACHE_G(proxy_connect_failed)) {
 			return NULL;
 		}
-        mmc = mmc_server_new(host, host_len, port, 0, timeout, 0, 0 TSRMLS_CC);
-        mmc->next = MEMCACHE_G(temp_proxy_list);
-        MEMCACHE_G(temp_proxy_list) = mmc;
-    } else {
-       mmc = mmc_find_persistent(host, host_len, port, timeout, 0, 0 TSRMLS_CC);
-    }
+		mmc = mmc_server_new(host, host_len, port, 0, timeout, 0, 0 TSRMLS_CC);
+		mmc->next = MEMCACHE_G(temp_proxy_list);
+		MEMCACHE_G(temp_proxy_list) = mmc;
+	} else {
+		mmc = mmc_find_persistent(host, host_len, port, timeout, 0, 0 TSRMLS_CC);
+	}
 
    if (!mmc_open(mmc, 1, &error_string, &errnum TSRMLS_CC)) {
-       php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't connect to mc proxy: %s:%ld, %s (%d)", host, port, error_string ? error_string : "Unknown error", errnum);
-       mmc_server_sleep(mmc TSRMLS_CC);
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't connect to mc proxy: %s:%ld, %s (%d)", host, port, error_string ? error_string : "Unknown error", errnum);
+		mmc_server_sleep(mmc TSRMLS_CC);
 
-       if (error_string) {
-           efree(error_string);
-       }
+		if (error_string) {
+		   efree(error_string);
+		}
 
-       mmc = NULL;
-	   if (MEMCACHE_G(in_multi)) {
-	       MEMCACHE_G(proxy_connect_failed) = 1;
-	   }
+		mmc = NULL;
+		if (MEMCACHE_G(in_multi)) {
+		   MEMCACHE_G(proxy_connect_failed) = 1;
+		}
    }
 
    return mmc;
@@ -2974,11 +3022,11 @@ PHP_FUNCTION(memcache_getl)
 
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|lz",
-			&mmc_object, memcache_class_entry_ptr, &zkey, &flags, &timeout, &cas) == FAILURE) {
+			&mmc_object, memcache_class_entry_ptr, &zkey, &timeout, &flags) == FAILURE) {
 			return;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|lz", &zkey, &timeout, &flags, &cas) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|lz", &zkey, &timeout, &flags) == FAILURE) {
 			return;
 		}
 	}
@@ -2988,6 +3036,33 @@ PHP_FUNCTION(memcache_getl)
 	}
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
+}
+
+/* {{{ proto mixed memcache_unlock( object memcache, mixed key, [ mixed cas ] )
+   Returns true if the item was unlocked successfully, with the given cas 
+   value or the one remembered in the internal cas array, else returns false */
+PHP_FUNCTION(memcache_unlock)
+{
+	zval *mmc_object = getThis(), *zkey = NULL;
+	unsigned long cas;
+	mmc_pool_t *pool;
+
+	if (mmc_object == NULL) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|l",
+			&mmc_object, memcache_class_entry_ptr, &zkey, &cas) == FAILURE) {
+			return;
+		}
+	} else {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|l", &zkey, &cas) == FAILURE) {
+			return;
+		}
+	}
+
+	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
+		RETURN_FALSE;
+	}
+
+	php_mmc_unlock(pool, zkey, cas, INTERNAL_FUNCTION_PARAM_PASSTHRU);
 }
 
 /* {{{ proto mixed memcache_get( object memcache, mixed key [, mixed &flags [, mixed &cas ] ] )
@@ -3037,6 +3112,42 @@ static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval
 	}
 }
 
+static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS) {
+	char key[MMC_KEY_MAX_SIZE];
+	unsigned int key_len;
+	unsigned long **cas_lookup;
+	int ret = -1;
+	int cas_delete = 0;
+
+	if (Z_TYPE_P(zkey) != IS_ARRAY) {
+		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
+			if (pool->cas_array) {
+				if (FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array), key, key_len + 1, (void**)&cas_lookup)) {
+					cas = **cas_lookup;
+					cas_delete = 1;
+				}
+			}
+
+			ret = mmc_exec_unl_cmd(pool, key, key_len, cas, INTERNAL_FUNCTION_PARAM_PASSTHRU);
+
+		    if (ret < 0) {
+				RETVAL_FALSE;
+				if (ret == -3)			// Failed to send command to the server.
+					cas_delete = 0; // so lets not clear the cas just yet.
+		    } else {
+				RETVAL_TRUE;
+			}
+		}
+		else {
+			RETVAL_FALSE;
+		}
+	}  else {
+		RETVAL_FALSE;
+	}
+
+	if (cas_delete)
+		zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
+}
 
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas) /* {{{ */
 {

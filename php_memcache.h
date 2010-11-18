@@ -56,6 +56,7 @@ PHP_FUNCTION(memcache_replace);
 PHP_FUNCTION(memcache_get);
 PHP_FUNCTION(memcache_get2);
 PHP_FUNCTION(memcache_getl);
+PHP_FUNCTION(memcache_unlock);
 PHP_FUNCTION(memcache_cas);
 PHP_FUNCTION(memcache_delete);
 PHP_FUNCTION(memcache_debug);

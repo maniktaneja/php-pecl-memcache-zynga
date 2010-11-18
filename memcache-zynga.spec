@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.1.2
+Version:      2.3.1.3
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,8 +150,15 @@ fi
 
 
 %changelog
+* Tue Nov 16 2010 <vsatyanarayana@zynga.com> 2.3.1.3
+- A new function unlock() is now supported to unlock a getl'ed key
+- 'add' will not be converted to cas
+- Handling of "temporary failure" for incr/decr & delete
+- getl on non existent key returns NULL
+- getl can accept an optional timeout parameter
+
 * Wed Nov 10 2010 <mtaneja@zynga.com> 2.3.1.2-1
-- In uncompression or unserialization fails do not deactivate the server.
+- If uncompression or unserialization fails do not deactivate the server.
   Return and log error only.
 - In case of multiget indicate failure of the keys that failed to uncompress/
   unserialize in the returned status array.
