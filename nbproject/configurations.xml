@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configurationDescriptor version="69">
+  <logicalFolder name="root" displayName="root" projectFiles="true">
+    <df name="hashing" root=".">
+      <df name="minilzo" kind="SOURCE_LOGICAL_FOLDER">
+        <in>lzoconf.h</in>
+        <in>lzodefs.h</in>
+        <in>minilzo.c</in>
+        <in>minilzo.h</in>
+        <in>testmini.c</in>
+      </df>
+      <in>memcache.c</in>
+      <in>memcache_consistent_hash.c</in>
+      <in>memcache_queue.c</in>
+      <in>memcache_queue.h</in>
+      <in>memcache_session.c</in>
+      <in>memcache_standard_hash.c</in>
+      <in>php_memcache.h</in>
+    </df>
+    <logicalFolder name="ExternalFiles"
+                   displayName="Important Files"
+                   projectFiles="false"
+                   kind="IMPORTANT_FILES_FOLDER">
+      <itemPath>Makefile-hashing.mk</itemPath>
+      <itemPath>makefile</itemPath>
+    </logicalFolder>
+  </logicalFolder>
+  <sourceRootList>
+    <Elem>.</Elem>
+  </sourceRootList>
+  <projectmakefile>Makefile-hashing.mk</projectmakefile>
+  <confs>
+    <conf name="Default" type="0">
+      <toolsSet>
+        <developmentServer>localhost</developmentServer>
+        <compilerSet>GNU|GNU</compilerSet>
+        <platform>4</platform>
+      </toolsSet>
+      <makefileType>
+        <makeTool>
+          <buildCommandWorkingDir>.</buildCommandWorkingDir>
+          <buildCommand>$(MAKE) -f Makefile</buildCommand>
+          <cleanCommand>$(MAKE) -f Makefile clean</cleanCommand>
+          <executablePath></executablePath>
+        </makeTool>
+      </makefileType>
+      <item path="memcache.c" ex="false" tool="0">
+        <cTool>
+          <incDir>
+            <pElem>minilzo</pElem>
+          </incDir>
+        </cTool>
+      </item>
+      <item path="memcache_consistent_hash.c" ex="false" tool="0">
+        <cTool>
+          <incDir>
+            <pElem>minilzo</pElem>
+          </incDir>
+        </cTool>
+      </item>
+      <item path="memcache_session.c" ex="false" tool="0">
+        <cTool>
+          <incDir>
+            <pElem>minilzo</pElem>
+          </incDir>
+        </cTool>
+      </item>
+      <item path="memcache_standard_hash.c" ex="false" tool="0">
+        <cTool>
+          <incDir>
+            <pElem>minilzo</pElem>
+          </incDir>
+        </cTool>
+      </item>
+    </conf>
+  </confs>
+</configurationDescriptor>
