@@ -150,7 +150,7 @@ fi
 
 
 %changelog
-* Wed Nov 12 2010 <bryan@zynga.com> 2.4.0.0-1
+* Wed Nov 18 2010 <bryan@zynga.com> 2.4.0.0-1
 - Added all of the ByKey operations allowing you to pass in a separate shard
   key for identifying the memcache node where the operation will be performed
 
