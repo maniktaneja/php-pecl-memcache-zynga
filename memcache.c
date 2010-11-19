@@ -3431,7 +3431,17 @@ PHP_FUNCTION(memcache_getByKey)
 		RETURN_FALSE;
 	}
 
-	if(php_mmc_get_by_key(pool, zkey, zshardKey, zvalue, flags, cas TSRMLS_CC) < 0) {
+	zval *tmp;
+	MAKE_STD_ZVAL(tmp);
+	ZVAL_NULL(tmp);
+
+	int result = php_mmc_get_by_key(pool, zkey, zshardKey, tmp, flags, cas);
+
+	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
+	FREE_ZVAL(tmp);
+
+	if(result < 0) {
+		zval_dtor(zvalue);
 		RETURN_FALSE;
 	} else {
 		RETURN_TRUE;
