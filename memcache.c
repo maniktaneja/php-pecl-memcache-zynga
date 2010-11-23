@@ -501,7 +501,6 @@ PHP_MINFO_FUNCTION(memcache)
    ------------------ */
 
 #ifdef ZEND_DEBUG
-#endif
 void mmc_debug(const char *format, ...) /* {{{ */
 {
 	TSRMLS_FETCH();
@@ -518,6 +517,7 @@ void mmc_debug(const char *format, ...) /* {{{ */
 	}
 }
 /* }}} */
+#endif
 
 static struct timeval _convert_timeoutms_to_ts(long msecs) /* {{{ */
 {
