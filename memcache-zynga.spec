@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.3.1.3
+Version:      2.4.0.0
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,10 @@ fi
 
 
 %changelog
+* Wed Nov 18 2010 <bryan@zynga.com> 2.4.0.0-1
+- Added all of the ByKey operations allowing you to pass in a separate shard
+  key for identifying the memcache node where the operation will be performed
+
 * Tue Nov 16 2010 <vsatyanarayana@zynga.com> 2.3.1.3
 - A new function unlock() is now supported to unlock a getl'ed key
 - 'add' will not be converted to cas

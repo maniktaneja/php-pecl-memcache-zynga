@@ -50,21 +50,35 @@ PHP_FUNCTION(memcache_add_server);
 PHP_FUNCTION(memcache_set_server_params);
 PHP_FUNCTION(memcache_get_server_status);
 PHP_FUNCTION(memcache_get_version);
+PHP_FUNCTION(memcache_addByKey);
+PHP_FUNCTION(memcache_addMultiByKey);
 PHP_FUNCTION(memcache_add);
 PHP_FUNCTION(memcache_set);
+PHP_FUNCTION(memcache_setByKey);
+PHP_FUNCTION(memcache_setMultiByKey);
+PHP_FUNCTION(memcache_replaceByKey);
+PHP_FUNCTION(memcache_replaceMultiByKey);
 PHP_FUNCTION(memcache_replace);
 PHP_FUNCTION(memcache_get);
 PHP_FUNCTION(memcache_get2);
 PHP_FUNCTION(memcache_getl);
 PHP_FUNCTION(memcache_unlock);
+PHP_FUNCTION(memcache_getByKey);
+PHP_FUNCTION(memcache_getMultiByKey);
+PHP_FUNCTION(memcache_casByKey);
+PHP_FUNCTION(memcache_casMultiByKey);
 PHP_FUNCTION(memcache_cas);
 PHP_FUNCTION(memcache_delete);
+PHP_FUNCTION(memcache_deleteByKey);
+PHP_FUNCTION(memcache_deleteMultiByKey);
 PHP_FUNCTION(memcache_debug);
 PHP_FUNCTION(memcache_get_stats);
 PHP_FUNCTION(memcache_get_extended_stats);
 PHP_FUNCTION(memcache_set_compress_threshold);
 PHP_FUNCTION(memcache_increment);
 PHP_FUNCTION(memcache_decrement);
+PHP_FUNCTION(memcache_incrementByKey);
+PHP_FUNCTION(memcache_decrementByKey);
 PHP_FUNCTION(memcache_close);
 PHP_FUNCTION(memcache_flush);
 PHP_FUNCTION(memcache_setoptimeout);
@@ -208,13 +222,12 @@ int mmc_prepare_key_ex(const char *, unsigned int, char *, unsigned int * TSRMLS
 mmc_pool_t *mmc_pool_new(TSRMLS_D);
 void mmc_pool_free(mmc_pool_t * TSRMLS_DC);
 void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
-int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int TSRMLS_DC);
+int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
-
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
