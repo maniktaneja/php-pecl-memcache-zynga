@@ -895,6 +895,10 @@ void mmc_pool_free(mmc_pool_t *pool TSRMLS_DC) /* {{{ */
 		pool->servers[i] = NULL;
 	}
 
+	if (pool->cas_array) {
+		zval_ptr_dtor(&(pool->cas_array));
+	}
+
 	if (pool->num_servers) {
 		efree(pool->servers);
 		efree(pool->requests);
@@ -1062,7 +1066,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		}
 
 		MMC_DEBUG(("mmc_pool_store: Sending request '%s'", request));
-		
+
 		if ((result = mmc_server_store(mmc, request, request_len TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
@@ -1768,7 +1772,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 				ZVAL_STRINGL(*return_value, value, value_len, 0);
 			}
 		}
-		
+
 		if (result == -2) {
 			/* failed to uncompress or unserialize */
 			if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
@@ -3382,7 +3386,7 @@ PHP_FUNCTION(memcache_getByKey)
 			return;
 		}
 	}
-	
+
 	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
 		RETURN_FALSE;
 	}
@@ -3472,7 +3476,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 
 						mmc_server_seterror(mmc, "Malformed END line", 0);
 					}
-					
+
 					result = -1;
 				} else if (result < 0) {
 					mmc_server_failure(mmc TSRMLS_CC);
@@ -3602,7 +3606,7 @@ PHP_FUNCTION(memcache_getMultiByKey) {
  */
 static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **return_value TSRMLS_DC) {
 	MMC_DEBUG(("php_mmc_get_multi_by_key: Entry"));
-	
+
 	HashTable *key_hash;
 	int key_array_count = 0;
 
@@ -3630,8 +3634,8 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 		MAKE_STD_ZVAL(zvalue);
 		zval *value_array;
 		ALLOC_INIT_ZVAL(value_array);
-		array_init(value_array);		
-		
+		array_init(value_array);
+
 		if (zend_hash_get_current_key_ex(key_hash, &input_key, &input_key_len, &idx, 0, NULL) == HASH_KEY_IS_STRING) {
 
 			add_assoc_zval(*return_value, input_key, value_array);
@@ -3713,7 +3717,7 @@ PHP_FUNCTION(memcache_getl)
 }
 
 /* {{{ proto mixed memcache_unlock( object memcache, mixed key, [ mixed cas ] )
-   Returns true if the item was unlocked successfully, with the given cas 
+   Returns true if the item was unlocked successfully, with the given cas
    value or the one remembered in the internal cas array, else returns false */
 PHP_FUNCTION(memcache_unlock)
 {

@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.0.0
+Version:      2.4.0.1
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Wed Nov 25 2010 <mtaneja@zynga.com> 2.4.0.1-1
+- Fixed memory leak due to array_init in mmc_pool_new
+
 * Wed Nov 18 2010 <bryan@zynga.com> 2.4.0.0-1
 - Added all of the ByKey operations allowing you to pass in a separate shard
   key for identifying the memcache node where the operation will be performed
