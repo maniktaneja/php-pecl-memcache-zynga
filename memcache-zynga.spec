@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.0.1
+Version:      2.4.0.2
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Mon Nov 29 2010 <mtaneja@zynga.com> 2.4.0.2-1
+- Fixed another memory leak in multi-get introduced in 2.3.1.2
+
 * Wed Nov 25 2010 <mtaneja@zynga.com> 2.4.0.1-1
 - Fixed memory leak due to array_init in mmc_pool_new
 

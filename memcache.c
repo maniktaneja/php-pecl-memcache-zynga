@@ -1949,7 +1949,7 @@ static int mmc_exec_retrieval_cmd_multi(
 			if (pool->requests[j]->status != MMC_STATUS_FAILED) {
 				for (value = NULL; (result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, pcas TSRMLS_CC)) > 0 || result == -2; value = NULL) {
 
-					int free_key = 0;
+					int free_key = 1;
 					if (result == -2) {
 						/* uncompression failed */
 						add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
