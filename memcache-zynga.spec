@@ -25,9 +25,9 @@ Requires(postun): %{__pecl}
 Provides:     php-pecl(%{pecl_name}) = %{version}-%{release}
 %if %{?php_zend_api}0
 Requires:     php(zend-abi) = %{php_zend_api}
-Requires:     php(api) = %{php_core_api}
+#Requires:     php(api) = %{php_core_api}
 %else
-Requires:     php-api = %{php_apiver}
+#Requires:     php-api = %{php_apiver}
 %endif
 Requires:     php >= %{php_version}
 Conflicts:    php-pecl(memcache)
