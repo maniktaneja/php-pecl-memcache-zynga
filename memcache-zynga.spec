@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.0.2
+Version:      2.4.0.3
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Tue Jan 18 2011 <mtaneja@zynga.com> 2.4.0.3-1
+- Added support for append(), prepend() and corresponding ByKey functions
+
 * Mon Nov 29 2010 <mtaneja@zynga.com> 2.4.0.2-1
 - Fixed another memory leak in multi-get introduced in 2.3.1.2
 

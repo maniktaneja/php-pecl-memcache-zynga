@@ -164,6 +164,10 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_decrementByKey,	NULL)
 	PHP_FE(memcache_increment,		NULL)
 	PHP_FE(memcache_decrement,		NULL)
+	PHP_FE(memcache_appendByKey,	NULL)
+	PHP_FE(memcache_prependByKey,	NULL)
+	PHP_FE(memcache_append,			NULL)
+	PHP_FE(memcache_prepend,		NULL)
 	PHP_FE(memcache_close,			NULL)
 	PHP_FE(memcache_flush,			NULL)
 	PHP_FE(memcache_setoptimeout,	NULL)
@@ -208,6 +212,10 @@ static zend_function_entry php_memcache_class_functions[] = {
 	PHP_FALIAS(decrementByKey,	memcache_decrementByKey,	NULL)
 	PHP_FALIAS(increment,		memcache_increment,			NULL)
 	PHP_FALIAS(decrement,		memcache_decrement,			NULL)
+	PHP_FALIAS(appendByKey,		memcache_appendByKey,		NULL)
+	PHP_FALIAS(prependByKey,	memcache_prependByKey,		NULL)
+	PHP_FALIAS(append,			memcache_append,			NULL)
+	PHP_FALIAS(prepend,			memcache_prepend,			NULL)
 	PHP_FALIAS(close,			memcache_close,				NULL)
 	PHP_FALIAS(flush,			memcache_flush,				NULL)
 	PHP_FALIAS(setoptimeout,	memcache_setoptimeout,		NULL)
@@ -3067,6 +3075,33 @@ PHP_FUNCTION(memcache_set)
 }
 /* }}} */
 
+/* {{{ proto bool memcache_append( object memcache, string key, mixed var [, int flag [, int expire ] ] )
+   Appends to the value of an item. Item may exist or not */
+PHP_FUNCTION(memcache_append)
+{
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "append", sizeof("append") - 1, 0);
+}
+/* }}} */
+
+/**
+ * "By key" version of memcache_append.
+ * true will be returned if successful and false will be returned if key doesn't
+ * exist or if there was some other issue storing the key/value in memcache.
+ */
+ /*
+php_function(memcache_appendByKey) {
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "append", sizeof("append") - 1, 0);
+}
+*/
+
+/* {{{ proto bool memcache_prepend( object memcache, string key, mixed var [, int flag [, int expire ] ] )
+   Prepends to the value of an item. Item may exist or not */
+PHP_FUNCTION(memcache_prepend)
+{
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "prepend", sizeof("prepend") - 1, 0);
+}
+/* }}} */
+
 /* {{{ proto bool memcache_cas(object memcache, mixed key [, mixed var [, int flag [, int exptime [, long cas ] ] ] ])
    Sets the value of an item if the CAS value is the same (Compare-And-Swap)  */
 PHP_FUNCTION(memcache_cas)
@@ -3197,6 +3232,24 @@ PHP_FUNCTION(memcache_casByKey) {
  */
 PHP_FUNCTION(memcache_casMultiByKey) {
 	php_handle_multi_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "cas", sizeof("cas") - 1);
+}
+
+/**
+ * "By key" version of memcache_append.
+ * true will be returned if successful and false will be returned if key doesn't
+ * exist or if there was some other issue storing the key/value in memcache.
+ */
+PHP_FUNCTION(memcache_appendByKey) {
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "append", sizeof("append") - 1, 1);
+}
+
+/**
+ * "By Key" version of memcache_prepend.
+ * true will be returned if successful and false will be returned if key doesn't
+ * exist or if there was some other issue storing the key/value in memcache.
+ */
+PHP_FUNCTION(memcache_prependByKey) {
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "prepend", sizeof("prepend") - 1, 0);
 }
 
 /**
