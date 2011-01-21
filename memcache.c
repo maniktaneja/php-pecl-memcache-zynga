@@ -404,6 +404,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 static void php_mmc_store_multi_by_key(zval * mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value TSRMLS_DC);
 static int php_mmc_delete_by_key(mmc_pool_t *pool, char *key, int key_len, char *shard_key, int shard_key_len, int time TSRMLS_DC);
 static void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int time, zval **return_value TSRMLS_DC);
+static int mmc_str(char *haystack, char *needle, int haystack_len, int needle_len);
 
 /* }}} */
 
@@ -753,6 +754,11 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSR
 		return 0;
 	}
 
+	if (mmc_str(mmc->inbuf, "temporary failure", response_len, sizeof("temporary failure") - 1)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to incr/decr, temporary failure. Item may be locked");
+		return 0;
+	}
+
 	/* return FALSE without failover */
 	if (mmc_str_left(mmc->inbuf, "SERVER_ERROR out of memory", response_len, sizeof("SERVER_ERROR out of memory") - 1) ||
 		mmc_str_left(mmc->inbuf, "SERVER_ERROR object too large", response_len, sizeof("SERVER_ERROR object too large")-1)) {
@@ -988,7 +994,11 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	/* autocompress large values */
 	if (pool->compress_threshold && value_len >= pool->compress_threshold &&
 		!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO))) {
-		flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
+
+		/* skip compression when the command is either append or prepend */
+		if (strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len)) {
+			flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
+		}
 	}
 
 	if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO)) {
@@ -3492,69 +3502,68 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 	unsigned long cas;
 	unsigned long *pcas = (return_cas != NULL) ? &cas : NULL;
 
-	// Only string keys are supported
-	if (Z_TYPE_P(zkey) == IS_STRING && Z_TYPE_P(zshardKey) == IS_STRING) {
+	if (return_flags != NULL) {
+		array_init(return_flags);
+	}
 
-		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK && mmc_prepare_key(zshardKey, shardKey, &shardKey_len TSRMLS_CC) == MMC_OK) {
-			MMC_DEBUG(("php_mmc_get_by_key: getting key '%s' using shardKey '%s'", key, shardKey));
+	if (return_cas != NULL) {
+		array_init(return_cas);
+	}
 
-			command_len = (pcas != NULL) ? spprintf(&command, 0, "gets %s", key) :
-										   spprintf(&command, 0, "get %s", key);
-			ZVAL_NULL(zvalue);
+	if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK && mmc_prepare_key(zshardKey, shardKey, &shardKey_len TSRMLS_CC) == MMC_OK) {
+		MMC_DEBUG(("php_mmc_get_by_key: getting key '%s' using shardKey '%s'", key, shardKey));
 
-			while (result < 0 && (mmc = mmc_pool_find(pool, shardKey, shardKey_len TSRMLS_CC)) != NULL) {
-				MMC_DEBUG(("php_mmc_get_by_key: found server '%s:%d' for key '%s' and shardKey '%s'", mmc->host, mmc->port, key, shardKey));
+		command_len = (pcas != NULL) ? spprintf(&command, 0, "gets %s", key) :
+			spprintf(&command, 0, "get %s", key);
+		ZVAL_NULL(zvalue);
 
-				/* send command and read value */
-				if ((result = mmc_sendcmd(mmc, command, command_len TSRMLS_CC)) > 0 &&
-						(result = mmc_read_value(mmc, NULL, NULL, &value, &value_len, &flags, pcas TSRMLS_CC)) >= 0) {
-					if (result != 0) {
-						if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || !mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
-							mmc_server_seterror(mmc, "Malformed END line", 0);
-							result = -1;
-						} else if (flags & MMC_SERIALIZED) {
-							result = mmc_postprocess_value(&zvalue, value, value_len TSRMLS_CC);
-						} else {
-							ZVAL_STRINGL(zvalue, value, value_len, 0);
-						}
-					}
-				}
+		while (result < 0 && (mmc = mmc_pool_find(pool, shardKey, shardKey_len TSRMLS_CC)) != NULL) {
+			MMC_DEBUG(("php_mmc_get_by_key: found server '%s:%d' for key '%s' and shardKey '%s'", mmc->host, mmc->port, key, shardKey));
 
-				MMC_DEBUG(("php_mmc_get_by_key: Result: '%d'", result));
-
-				if (result == -2) {
-					//clear out the buffer from a failure to uncompress in mmc_read_value
-					if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
-							!mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
-
+			/* send command and read value */
+			if ((result = mmc_sendcmd(mmc, command, command_len TSRMLS_CC)) > 0 &&
+					(result = mmc_read_value(mmc, NULL, NULL, &value, &value_len, &flags, pcas TSRMLS_CC)) >= 0) {
+				if (result != 0) {
+					if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || !mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
 						mmc_server_seterror(mmc, "Malformed END line", 0);
+						result = -1;
+					} else if (flags & MMC_SERIALIZED) {
+						result = mmc_postprocess_value(&zvalue, value, value_len TSRMLS_CC);
+					} else {
+						ZVAL_STRINGL(zvalue, value, value_len, 0);
 					}
-
-					result = -1;
-				} else if (result < 0) {
-					mmc_server_failure(mmc TSRMLS_CC);
 				}
 			}
 
-			if (return_flags != NULL) {
-				zval_dtor(return_flags);
-				ZVAL_LONG(return_flags, flags);
+			MMC_DEBUG(("php_mmc_get_by_key: Result: '%d'", result));
+
+			if (result == -2) {
+				//clear out the buffer from a failure to uncompress in mmc_read_value
+				if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
+						!mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
+
+					mmc_server_seterror(mmc, "Malformed END line", 0);
+				}
+
+				result = -1;
+			} else if (result < 0) {
+				mmc_server_failure(mmc TSRMLS_CC);
 			}
-
-			if (return_cas != NULL) {
-				zval_dtor(return_cas);
-				ZVAL_LONG(return_cas, cas);
-			}
-
-			efree(command);
-
-			return result;
-		} else {
-			MMC_DEBUG(("php_mmc_get_by_key: Unknown problem with the key or shardKey"));
-			return -1;
 		}
+		if (return_flags != NULL) {
+			zval_dtor(return_flags);
+			ZVAL_LONG(return_flags, flags);
+		}
+
+		if (return_cas != NULL) {
+			zval_dtor(return_cas);
+			ZVAL_LONG(return_cas, cas);
+		}
+		efree(command);
+
+		return result;
 	} else {
-		MMC_DEBUG(("php_mmc_get_by_key: The key and shardKey must be of type string"));
+		MMC_DEBUG(("php_mmc_get_by_key: Unknown problem with the key or shardKey"));
 		return -1;
 	}
 }
@@ -3730,7 +3739,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 						add_assoc_null(value_array, "value");
 					}
 				}
-
+				zval_ptr_dtor(&zkey);
 				efree(str);
 			} else {
 				php_error_docref(NULL TSRMLS_CC, E_ERROR, "ShardKey passed in for key '%s' wasn't a string type", input_key);

@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.0.3
+Version:      2.4.1.0
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,13 @@ fi
 
 
 %changelog
+* Fri Jan 21 2011 <mtaneja@zynga.com> 2.4.1.0-1
+- Append/Prepend operation will not compress data even if the compression
+  flags are set.
+- Fixed a crash in get_by_multi_key, which was happening due to a use of
+  an uninitialized array variable
+- Fixed a memory leak in get_by_multi_key
+
 * Tue Jan 18 2011 <mtaneja@zynga.com> 2.4.0.3-1
 - Added support for append(), prepend() and corresponding ByKey functions
 
