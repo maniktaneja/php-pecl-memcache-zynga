@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.0
+Version:      2.4.1.1
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,14 @@ fi
 
 
 %changelog
+* Mon Jan 24 2011 <mtaneja@zynga.com> 2.4.1.1-1
+- Set requests are internally converted to getl so that they use
+  the cas value returned by getl. Between the time the lock was taken
+  and the set operation being performed the key could be deleted due to
+  expiration. Therefore in this case a cas operation on
+  non existent key will return NOT_FOUND. To ensure correctness we need to
+  retry the set operation
+
 * Fri Jan 21 2011 <mtaneja@zynga.com> 2.4.1.0-1
 - Append/Prepend operation will not compress data even if the compression
   flags are set.

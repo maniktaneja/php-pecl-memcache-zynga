@@ -374,7 +374,7 @@ static void _mmc_pool_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 static void _mmc_pserver_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 
 static void mmc_server_free(mmc_t * TSRMLS_DC);
-static int mmc_server_store(mmc_t *, const char *, int TSRMLS_DC);
+static int mmc_server_store(mmc_t *, const char *, int, int TSRMLS_DC);
 
 static int mmc_compress(char **, unsigned long *, const char *, int, int TSRMLS_DC);
 static int mmc_uncompress(char **, unsigned long *, const char *, int, int);
@@ -707,7 +707,7 @@ int mmc_server_failure(mmc_t *mmc TSRMLS_DC) /*determines if a request should be
 }
 /* }}} */
 
-static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSRMLS_DC) /* {{{ */
+static int mmc_server_store(mmc_t *mmc, const char *request, int request_len, int retry_maybe TSRMLS_DC) /* {{{ */
 {
 	int response_len;
 	php_stream *stream;
@@ -747,6 +747,17 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSR
 	}
 
 	if(mmc_str_left(mmc->inbuf, "NOT_FOUND", response_len, sizeof("NOT_FOUND") - 1)) {
+		if (retry_maybe) {
+			/*
+			 * this request was originally a set which was converted to cas because
+			 * getl operation was performed for this request earlier. Between the time
+			 * the lock was taken and the set operation being performed the key was
+			 * deleted due to expiration. Therefore in this case a cas operation on
+			 * non existent key returned NOT_FOUND. To ensure correctness we need to
+			 * retry the set operation
+			 */
+			 return 2;
+		}
 		return 0;
 	}
 
@@ -755,7 +766,7 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSR
 	}
 
 	if (mmc_str(mmc->inbuf, "temporary failure", response_len, sizeof("temporary failure") - 1)) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to incr/decr, temporary failure. Item may be locked");
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to perform operation, temporary failure. Item may be locked or server out of memory");
 		return 0;
 	}
 
@@ -978,6 +989,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	unsigned long **cas_lookup;
+	int retry_maybe = 0;
 
 	MMC_DEBUG(("mmc_pool_store: key '%s' len '%d'", key, key_len));
 
@@ -1035,10 +1047,13 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		if (FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1, (void**)&cas_lookup)) {
 			cas = **cas_lookup ;
 			zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
+			retry_maybe = 1; /* we may have to retry with a set */
 		}
 	}
 
 	int caslen = (cas != 0)? MAX_LENGTH_OF_LONG + 1: 0;
+
+retry_store:
 
 	request = emalloc(
 			command_len
@@ -1085,9 +1100,16 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 		MMC_DEBUG(("mmc_pool_store: Sending request '%s'", request));
 
-		if ((result = mmc_server_store(mmc, request, request_len TSRMLS_CC)) < 0) {
+		if ((result = mmc_server_store(mmc, request, request_len, retry_maybe TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
+	}
+
+	if (2 == result && retry_maybe) {
+		caslen = retry_maybe = 0;
+		result = -1;
+		efree(request);
+		goto retry_store;
 	}
 
 	if (key_copy != NULL) {
@@ -1103,6 +1125,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	}
 
 	efree(request);
+
 
 	return result;
 }
@@ -3259,7 +3282,7 @@ PHP_FUNCTION(memcache_appendByKey) {
  * exist or if there was some other issue storing the key/value in memcache.
  */
 PHP_FUNCTION(memcache_prependByKey) {
-	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "prepend", sizeof("prepend") - 1, 0);
+	php_handle_store_command(INTERNAL_FUNCTION_PARAM_PASSTHRU, "prepend", sizeof("prepend") - 1, 1);
 }
 
 /**
