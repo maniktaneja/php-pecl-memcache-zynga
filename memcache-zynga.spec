@@ -152,6 +152,7 @@ fi
 %changelog
 * Mon Jan 24 2011 <mtaneja@zynga.com> 2.4.1.1-1
 - PrependByKey was not using the shard key
+- Shard Keys for xxxMultiByKey can be numeric
 
 * Fri Jan 21 2011 <mtaneja@zynga.com> 2.4.1.0-1
 - Append/Prepend operation will not compress data even if the compression
