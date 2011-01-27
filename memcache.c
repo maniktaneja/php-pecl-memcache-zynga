@@ -374,7 +374,7 @@ static void _mmc_pool_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 static void _mmc_pserver_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 
 static void mmc_server_free(mmc_t * TSRMLS_DC);
-static int mmc_server_store(mmc_t *, const char *, int, int TSRMLS_DC);
+static int mmc_server_store(mmc_t *, const char *, int TSRMLS_DC);
 
 static int mmc_compress(char **, unsigned long *, const char *, int, int TSRMLS_DC);
 static int mmc_uncompress(char **, unsigned long *, const char *, int, int);
@@ -707,7 +707,7 @@ int mmc_server_failure(mmc_t *mmc TSRMLS_DC) /*determines if a request should be
 }
 /* }}} */
 
-static int mmc_server_store(mmc_t *mmc, const char *request, int request_len, int retry_maybe TSRMLS_DC) /* {{{ */
+static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSRMLS_DC) /* {{{ */
 {
 	int response_len;
 	php_stream *stream;
@@ -747,17 +747,6 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len, in
 	}
 
 	if(mmc_str_left(mmc->inbuf, "NOT_FOUND", response_len, sizeof("NOT_FOUND") - 1)) {
-		if (retry_maybe) {
-			/*
-			 * this request was originally a set which was converted to cas because
-			 * getl operation was performed for this request earlier. Between the time
-			 * the lock was taken and the set operation being performed the key was
-			 * deleted due to expiration. Therefore in this case a cas operation on
-			 * non existent key returned NOT_FOUND. To ensure correctness we need to
-			 * retry the set operation
-			 */
-			 return 2;
-		}
 		return 0;
 	}
 
@@ -989,7 +978,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	unsigned long **cas_lookup;
-	int retry_maybe = 0;
 
 	MMC_DEBUG(("mmc_pool_store: key '%s' len '%d'", key, key_len));
 
@@ -1047,7 +1035,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		if (FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1, (void**)&cas_lookup)) {
 			cas = **cas_lookup ;
 			zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
-			retry_maybe = 1; /* we may have to retry with a set */
 		}
 	}
 
@@ -1100,16 +1087,9 @@ retry_store:
 
 		MMC_DEBUG(("mmc_pool_store: Sending request '%s'", request));
 
-		if ((result = mmc_server_store(mmc, request, request_len, retry_maybe TSRMLS_CC)) < 0) {
+		if ((result = mmc_server_store(mmc, request, request_len TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
-	}
-
-	if (2 == result && retry_maybe) {
-		caslen = retry_maybe = 0;
-		result = -1;
-		efree(request);
-		goto retry_store;
 	}
 
 	if (key_copy != NULL) {
@@ -3732,41 +3712,36 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				continue;
 			}
 
-			// Verify that data contains the shardKey as a string
-			if (Z_TYPE_PP(data) == IS_STRING) {
-				MMC_DEBUG(("php_mmc_get_multi_by_key: Sending command for key '%s' with shard key '%s'", input_key, Z_STRVAL_PP(data)));
+			MMC_DEBUG(("php_mmc_get_multi_by_key: Sending command for key '%s' with shard key '%s'", input_key, Z_STRVAL_PP(data)));
 
-				//Copy the input_key into a temp string to be passed along
-				char *str;
-				str = estrdup(input_key);
-				zval *zkey;
-				MAKE_STD_ZVAL(zkey);
-				ZVAL_STRING(zkey, str, 1);
+			//Copy the input_key into a temp string to be passed along
+			char *str;
+			str = estrdup(input_key);
+			zval *zkey;
+			MAKE_STD_ZVAL(zkey);
+			ZVAL_STRING(zkey, str, 1);
 
-				add_assoc_string(value_array, "shardKey", Z_STRVAL_PP(data), 1);
+			add_assoc_zval(value_array, "shardKey", *data);
 
-				if ((result = php_mmc_get_by_key(pool, zkey, *data, zvalue, flags, cas TSRMLS_CC)) < 0) {
-					MMC_DEBUG(("php_mmc_get_multi_by_key: Get failed for key '%s'", input_key));
-					add_assoc_bool(value_array, "status", 0);
-				} else {
-					MMC_DEBUG(("php_mmc_get_multi_by_key: Get was successful for key '%s'", input_key));
-					add_assoc_bool(value_array, "status", 1);
-
-					if (result > 0) {
-						MMC_DEBUG(("php_mmc_get_multi_by_key: value retrieved"));
-						add_assoc_zval(value_array, "value", zvalue);
-						add_assoc_zval(value_array, "flag", flags);
-						add_assoc_zval(value_array, "cas", cas);
-					} else {
-						MMC_DEBUG(("php_mmc_get_multi_by_key: Nothing returned from Get for key '%s'", input_key));
-						add_assoc_null(value_array, "value");
-					}
-				}
-				zval_ptr_dtor(&zkey);
-				efree(str);
+			if ((result = php_mmc_get_by_key(pool, zkey, *data, zvalue, flags, cas TSRMLS_CC)) < 0) {
+				MMC_DEBUG(("php_mmc_get_multi_by_key: Get failed for key '%s'", input_key));
+				add_assoc_bool(value_array, "status", 0);
 			} else {
-				php_error_docref(NULL TSRMLS_CC, E_ERROR, "ShardKey passed in for key '%s' wasn't a string type", input_key);
+				MMC_DEBUG(("php_mmc_get_multi_by_key: Get was successful for key '%s'", input_key));
+				add_assoc_bool(value_array, "status", 1);
+
+				if (result > 0) {
+					MMC_DEBUG(("php_mmc_get_multi_by_key: value retrieved"));
+					add_assoc_zval(value_array, "value", zvalue);
+					add_assoc_zval(value_array, "flag", flags);
+					add_assoc_zval(value_array, "cas", cas);
+				} else {
+					MMC_DEBUG(("php_mmc_get_multi_by_key: Nothing returned from Get for key '%s'", input_key));
+					add_assoc_null(value_array, "value");
+				}
 			}
+			zval_ptr_dtor(&zkey);
+			efree(str);
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Key passed in wasn't a string type");
 		}
@@ -4160,25 +4135,19 @@ static void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int 
 				continue;
 			}
 
-			// Verify that data contains an array
-			if (Z_TYPE_PP(data) == IS_STRING) {
-				MMC_DEBUG(("php_mmc_delete_multi_by_key: Sending delete for key '%s'", input_key));
+			MMC_DEBUG(("php_mmc_delete_multi_by_key: Sending delete for key '%s'", input_key));
 
-				char shard_key[MMC_KEY_MAX_SIZE];
-				unsigned int shard_key_len;
+			char shard_key[MMC_KEY_MAX_SIZE];
+			unsigned int shard_key_len;
 
-				mmc_prepare_key(*data, shard_key, &shard_key_len TSRMLS_CC);
+			mmc_prepare_key(*data, shard_key, &shard_key_len TSRMLS_CC);
 
-				if (php_mmc_delete_by_key(pool, input_key, input_key_len-1, shard_key, shard_key_len, time TSRMLS_CC) > 0) {
-					MMC_DEBUG(("php_mmc_delete_multi_by_key: delete succeeded for key '%s'", input_key));
-					add_assoc_bool(*return_value, input_key, 1);
-				} else {
-					MMC_DEBUG(("php_mmc_delete_multi_by_key: delete failed for key '%s'", input_key));
-					add_assoc_bool(*return_value, input_key, 0);
-				}
+			if (php_mmc_delete_by_key(pool, input_key, input_key_len-1, shard_key, shard_key_len, time TSRMLS_CC) > 0) {
+				MMC_DEBUG(("php_mmc_delete_multi_by_key: delete succeeded for key '%s'", input_key));
+				add_assoc_bool(*return_value, input_key, 1);
 			} else {
+				MMC_DEBUG(("php_mmc_delete_multi_by_key: delete failed for key '%s'", input_key));
 				add_assoc_bool(*return_value, input_key, 0);
-				php_error_docref(NULL TSRMLS_CC, E_ERROR, "value passed in for key '%s' wasn't a string type", input_key);
 			}
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Key passed in wasn't a string type");
