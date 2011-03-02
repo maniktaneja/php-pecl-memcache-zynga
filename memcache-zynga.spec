@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.1
+Version:      2.4.1.2
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,10 @@ fi
 
 
 %changelog
+* Tue Mar 01 2011 <mtaneja@zynga.com> 2.4.1.2-1
+- Weight paramter in addServer cannot be 0
+- retry interval is a configurable paramter
+
 * Mon Jan 24 2011 <mtaneja@zynga.com> 2.4.1.1-1
 - PrependByKey was not using the shard key
 - Shard Keys for xxxMultiByKey can be numeric

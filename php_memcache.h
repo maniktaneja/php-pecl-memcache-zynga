@@ -202,6 +202,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	long proxy_port;
 	int proxy_hostlen;
 	int connection_retry_count;
+	int retry_interval;
 	zend_bool in_multi;
 	zend_bool proxy_connect_failed;
 	mmc_t * temp_proxy_list;

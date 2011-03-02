@@ -338,6 +338,18 @@ static PHP_INI_MH(OnUpdateCompressionLevel) /* {{{ */
 	MEMCACHE_G(compression_level) = lval;
 	return SUCCESS;
 }
+
+static PHP_INI_MH(OnUpdateRetryInterval) /* {{{ */
+{
+	int lval;
+	lval = strtol(new_value, NULL, 10);
+	if (lval < 3 || lval > 30) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "memcache.retry_interval must be >= 3 and <= 30 ");
+		return FAILURE;
+	}
+	MEMCACHE_G(retry_interval) = lval;
+	return SUCCESS;
+}
 /* }}} */
 
 static PHP_INI_MH(OnUpdateProxyHost) /* {{{ */
@@ -366,6 +378,7 @@ PHP_INI_BEGIN()
    STD_PHP_INI_ENTRY("memcache.proxy_host",        NULL,   PHP_INI_ALL, OnUpdateProxyHost, proxy_host, zend_memcache_globals,  memcache_globals)
    STD_PHP_INI_ENTRY("memcache.proxy_port",        "0",    PHP_INI_ALL, OnUpdateLong,  proxy_port, zend_memcache_globals,  memcache_globals)
    STD_PHP_INI_ENTRY("memcache.connection_retry_count",        "0",    PHP_INI_ALL, OnUpdateLong,  connection_retry_count, zend_memcache_globals,  memcache_globals)
+   STD_PHP_INI_ENTRY("memcache.retry_interval",    "15",    PHP_INI_ALL, OnUpdateRetryInterval,  retry_interval, zend_memcache_globals,  memcache_globals)
 PHP_INI_END()
 /* }}} */
 
@@ -2556,6 +2569,7 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 	char *host, *error_string = NULL;
 	long port = MEMCACHE_G(default_port), timeout = MEMCACHE_G(default_timeout_ms) / 1000, timeoutms = 0;
 	zend_bool use_binary = 0;
+	int retry_interval = MEMCACHE_G(retry_interval);
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|lllb", &host, &host_len, &port, &timeout, &timeoutms, &use_binary) == FAILURE) {
 		return;
@@ -2567,11 +2581,11 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 
 	/* initialize and connect server struct */
 	if (persistent) {
-		mmc = mmc_find_persistent(host, host_len, port, timeout, MMC_DEFAULT_RETRY, use_binary TSRMLS_CC);
+		mmc = mmc_find_persistent(host, host_len, port, timeout, retry_interval, use_binary TSRMLS_CC);
 	}
 	else {
 		MMC_DEBUG(("php_mmc_connect: creating regular connection"));
-		mmc = mmc_server_new(host, host_len, port, 0, timeout, MMC_DEFAULT_RETRY, use_binary TSRMLS_CC);
+		mmc = mmc_server_new(host, host_len, port, 0, timeout, retry_interval, use_binary TSRMLS_CC);
 	}
 
 	mmc->timeout = timeout;
@@ -2728,7 +2742,7 @@ PHP_FUNCTION(memcache_add_server)
 	zval **connection, *mmc_object = getThis(), *failure_callback = NULL;
 	mmc_pool_t *pool;
 	mmc_t *mmc;
-	long port = MEMCACHE_G(default_port), weight = 1, timeout = MEMCACHE_G(default_timeout_ms) / 1000, retry_interval = MMC_DEFAULT_RETRY, timeoutms = 0;
+	long port = MEMCACHE_G(default_port), weight = 1, timeout = MEMCACHE_G(default_timeout_ms) / 1000, retry_interval = MEMCACHE_G(retry_interval), timeoutms = 0;
 	zend_bool persistent = 1, status = 1;
 	int resource_type, host_len, list_id;
 	char *host;
@@ -2749,7 +2763,7 @@ PHP_FUNCTION(memcache_add_server)
 		timeoutms = MEMCACHE_G(default_timeout_ms);
 	}
 
-	if (weight < 0) {
+	if (weight <= 0) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "weight must be a positive integer");
 		RETURN_FALSE;
 	}
@@ -2759,6 +2773,10 @@ PHP_FUNCTION(memcache_add_server)
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid failure callback");
 			RETURN_FALSE;
 		}
+	}
+
+	if (retry_interval < 3 || retry_interval > 30) {
+		retry_interval = MEMCACHE_G(retry_interval);
 	}
 
 	/* lazy initialization of server struct */
@@ -2808,7 +2826,7 @@ PHP_FUNCTION(memcache_set_server_params)
 	zval *mmc_object = getThis(), *failure_callback = NULL;
 	mmc_pool_t *pool;
 	mmc_t *mmc = NULL;
-	long port = MEMCACHE_G(default_port), timeout = MEMCACHE_G(default_timeout_ms) / 1000, retry_interval = MMC_DEFAULT_RETRY;
+	long port = MEMCACHE_G(default_port), timeout = MEMCACHE_G(default_timeout_ms) / 1000, retry_interval = MEMCACHE_G(retry_interval);
 	zend_bool status = 1;
 	int host_len, i;
 	char *host;
@@ -2845,6 +2863,14 @@ PHP_FUNCTION(memcache_set_server_params)
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid failure callback");
 			RETURN_FALSE;
 		}
+	}
+
+	if (retry_interval < 3 || retry_interval > 30) {
+		retry_interval = MEMCACHE_G(retry_interval);
+	}
+
+	if (timeout < 1) {
+		timeout = MEMCACHE_G(default_timeout_ms);
 	}
 
 	mmc->timeout = timeout;
