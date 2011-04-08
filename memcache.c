@@ -1644,8 +1644,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	char *command, *value;
 	int result = -1, command_len, response_len, value_len, flags = 0;
 	unsigned long cas = 0;
-	int lockFail = 0;
-	
+
 	MMC_DEBUG(("mmc_exec_getl_cmd: key '%s'", key));
 
 	if (timeout < 0 || timeout > 30)
@@ -1654,7 +1653,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	command_len = (timeout) ? spprintf(&command, 0, "getl %s %d", key, timeout):
 									spprintf(&command, 0, "getl %s", key);
 
-	while (lockFail == 0 && result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
 		MMC_DEBUG(("mmc_exec_getl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
 
 		/* send command and read value */
@@ -1692,8 +1691,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 			if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf), sizeof("LOCK_ERROR")-1)) {
 				/* failed to lock */
 				ZVAL_FALSE(*return_value);
-				result = -1;
-				lockFail = 1;
+				result = 0;
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
 				/* key doesn't exist */
 				result = 0;

@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.3
+Version:      2.4.1.2
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,9 +150,6 @@ fi
 
 
 %changelog
-* Tue Mar 29 2011 <bryan@zynga.com> 2.4.1.3-1
-- Change getl to return false on LOCK_ERROR so we can retry
-
 * Tue Mar 01 2011 <mtaneja@zynga.com> 2.4.1.2-1
 - Weight paramter in addServer cannot be 0
 - retry interval is a configurable paramter
