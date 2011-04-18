@@ -3572,9 +3572,11 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 						!mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
 
 					mmc_server_seterror(mmc, "Malformed END line", 0);
+					result = -1;
+				} else {
+					result = 0;
 				}
 
-				result = -1;
 			} else if (result < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);
 			}
