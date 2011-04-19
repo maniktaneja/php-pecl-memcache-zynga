@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.2
+Version:      2.4.1.3
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,11 @@ fi
 
 
 %changelog
+* Tue Apr 19 2011 <vsatyanarayana@zynga.com> 2.4.1.3
+- Fix for a infinite loop in get_by_key api. 
+- Return false if uncompress failed in get_by_key.
+- status_array was not NULL checked in a couple of places.
+
 * Tue Mar 01 2011 <mtaneja@zynga.com> 2.4.1.2-1
 - Weight paramter in addServer cannot be 0
 - retry interval is a configurable paramter

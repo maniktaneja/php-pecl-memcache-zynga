@@ -1880,6 +1880,9 @@ static size_t tokenize_command(char *command, token_t *tokens, const size_t max_
 
 
 static void update_result_array(zval **status_array, char *line) {
+	if (status_array == NULL) {
+		return;
+	}
 	token_t tokens[MAX_TOKENS];
 	int i;
 	int ntokens = tokenize_command(line, (token_t *)&tokens, MAX_TOKENS);
@@ -1986,7 +1989,9 @@ static int mmc_exec_retrieval_cmd_multi(
 					int free_key = 1;
 					if (result == -2) {
 						/* uncompression failed */
-						add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
+						if (status_array) {
+							add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
+						}
 					}
 					else if (flags & MMC_SERIALIZED) {
 						zval *result;
@@ -2048,7 +2053,9 @@ static int mmc_exec_retrieval_cmd_multi(
 			key = (zval *)mmc_queue_pop(&serialized_key);
 			if (result = mmc_postprocess_value(&value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
 				/* unserialize failed */
-				add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
+				if (status_array) {
+					add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
+				}
 			}
 			efree(key);
 		}
@@ -3492,7 +3499,7 @@ PHP_FUNCTION(memcache_getByKey)
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
 	FREE_ZVAL(tmp);
 
-	if(result < 0) {
+	if(result <= 0) {
 		zval_dtor(zvalue);
 		RETURN_FALSE;
 	} else {
