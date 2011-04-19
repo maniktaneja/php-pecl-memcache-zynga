@@ -3499,7 +3499,7 @@ PHP_FUNCTION(memcache_getByKey)
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
 	FREE_ZVAL(tmp);
 
-	if(result <= 0) {
+	if(result < 0) {
 		zval_dtor(zvalue);
 		RETURN_FALSE;
 	} else {
@@ -3581,7 +3581,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 					mmc_server_seterror(mmc, "Malformed END line", 0);
 					result = -1;
 				} else {
-					result = 0;
+					break;	
 				}
 
 			} else if (result < 0) {
