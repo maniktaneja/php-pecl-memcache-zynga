@@ -511,7 +511,7 @@ PHP_MINFO_FUNCTION(memcache)
 	php_info_print_table_row(2, "Active persistent connections", buf);
 	php_info_print_table_row(2, "LZO compression", memcache_lzo_enabled? "enabled": "disabled");
 	php_info_print_table_row(2, "Version", PHP_MEMCACHE_VERSION);
-	php_info_print_table_row(2, "Revision", "$Revision: 1.111 $");
+	php_info_print_table_row(2, "Revision", "$Revision$");
 	php_info_print_table_end();
 
 	DISPLAY_INI_ENTRIES();

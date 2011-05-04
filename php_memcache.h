@@ -89,7 +89,7 @@ PHP_FUNCTION(memcache_setoptimeout);
 PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 
-#define PHP_MEMCACHE_VERSION "2.3.0"
+#define PHP_MEMCACHE_VERSION "2.4.1.3"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED 1
