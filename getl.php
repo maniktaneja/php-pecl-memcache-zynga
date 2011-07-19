@@ -1,44 +1,33 @@
 <?php
 
-$memcache = new memcache;
+$m1 = new Memcache;
+$m1->addServer("localhost", 11211);
 
-$memcache->addServer("localhost", 11211);
+$m2 = new Memcache;
+$m2->addServer("localhost", 11211);
 
+$timeout = 25;
+$sleept = 16;
 
-if ($memcache) {
+$m1->delete("k1");
+$m1->set("k1", "whats her name");
 
-    $get_array = array("k1","k2","k3","k4","k5");
-    $memcache->delete("k1");
-    $memcache->getl("k1", 20);
+echo "\nKey k1 is set";
+echo "\nDoing getl of k1 with 20 second timeout \n";
 
-    $memcache->getl("x1");
+var_dump($m1->getl("k1", $timeout));
+echo "\nSleeping for $sleept seconds\n";
+sleep($sleept);
 
-    $memcache->set("k1", "whats her name");
+echo "\nSleep done. Doing getl of k1 again\n";
+var_dump($m2->getl("k1"));
+echo "\nLets try a set instead\n";
+var_dump($m2->set("k1", "lucy"));
+echo "\nLets try a set instead\n";
+var_dump($m2->set("k1", "lucy"));
+echo "\nA getl once more:\n";
+var_dump($m2->getl("k1"));
+echo "\nDone\n";
 
-    $memcache->getl("k1");
-    $memcache->set("k1", "dont be late, alright");
-
-    $memcache->getl("k1"); /* should fail */
-
-    echo "haha";
-    var_dump($memcache->getl("k1"));
-    $memcache->set("k1", "lizzi the wizzi");
-
-    var_dump($memcache->get('k1'));
-
-    $memcache->set("k1", 25);
-    $memcache->getl("k1");
-    $memcache->increment("k1", 5);
-    $memcache->add("k1", 50, 0);
-    $memcache->delete("k1");
-
-    $return = $memcache->getl("z1");
-    var_dump($return);
-
-
-}
-else {
-	echo "Connection to memcached failed";
-}
 ?>
 
