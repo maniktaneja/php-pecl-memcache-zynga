@@ -84,6 +84,16 @@ ZEND_BEGIN_ARG_INFO(memcache_get_arginfo1, 0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 
+ZEND_BEGIN_ARG_INFO(memcache_findserver_arginfo, 0)
+	ZEND_ARG_INFO(0, memcache)
+	ZEND_ARG_INFO(0, key)
+ZEND_END_ARG_INFO();
+
+ZEND_BEGIN_ARG_INFO(memcache_findserver_arginfo1, 0)
+	ZEND_ARG_INFO(0, key)
+ZEND_END_ARG_INFO();
+
+
 
 ZEND_BEGIN_ARG_INFO(memcache_getl_arginfo, 0)
 	ZEND_ARG_PASS_INFO(0)
@@ -144,6 +154,7 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_replaceByKey,	NULL)
 	PHP_FE(memcache_replaceMultiByKey, NULL)
 	PHP_FE(memcache_replace,		NULL)
+	PHP_FE(memcache_findserver,		memcache_findserver_arginfo)
 	PHP_FE(memcache_get,			memcache_get_arginfo)
 	PHP_FE(memcache_get2,			memcache_get2_arginfo)
 	PHP_FE(memcache_getl,			memcache_getl_arginfo)
@@ -192,6 +203,7 @@ static zend_function_entry php_memcache_class_functions[] = {
 	PHP_FALIAS(replaceByKey,	memcache_replaceByKey,		NULL)
 	PHP_FALIAS(replaceMultiByKey, memcache_replaceMultiByKey, NULL)
 	PHP_FALIAS(replace,			memcache_replace,			NULL)
+	PHP_FALIAS(findserver,		memcache_findserver,	    memcache_findserver_arginfo1)
 	PHP_FALIAS(get,				memcache_get,				memcache_get_arginfo1)
 	PHP_FALIAS(get2,			memcache_get2,				get2_arginfo)
 	PHP_FALIAS(getl,			memcache_getl,				memcache_getl_arginfo1)
@@ -3810,6 +3822,51 @@ PHP_FUNCTION(memcache_getl)
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
 }
+/* {{{ proto string memcache_findserver(object memcache, mixed key)
+   Computes the hash of the key and finds the exact server in the pool to which this key will be mapped. Returns that host as a string.
+*/
+PHP_FUNCTION(memcache_findserver)
+{
+	mmc_pool_t *pool;
+	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
+	int timeout = 15;
+	char key[MMC_KEY_MAX_SIZE];
+	unsigned int key_len;
+	mmc_t *mmc;
+
+	if (mmc_object == NULL) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz",
+			&mmc_object, memcache_class_entry_ptr, &zkey) == FAILURE) {
+			return;
+		}
+	} else {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &zkey) == FAILURE) {
+			return;
+		}
+	}
+
+	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
+		RETURN_FALSE;
+	}
+
+
+	if (Z_TYPE_P(zkey) != IS_ARRAY) {
+		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
+			if ((mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) == NULL) {
+				zval_dtor(return_value);
+				ZVAL_FALSE(return_value);
+			} else { // we found the server
+                RETVAL_STRING(mmc->host, 1);
+            }
+		}
+		else {
+			ZVAL_FALSE(return_value);
+		}
+	}  else {
+		ZVAL_FALSE(return_value);
+	}
+}
+/* }}}*/
 
 /* {{{ proto mixed memcache_unlock( object memcache, mixed key, [ mixed cas ] )
    Returns true if the item was unlocked successfully, with the given cas
@@ -3837,6 +3894,7 @@ PHP_FUNCTION(memcache_unlock)
 
 	php_mmc_unlock(pool, zkey, cas, INTERNAL_FUNCTION_PARAM_PASSTHRU);
 }
+/* }}}*/
 
 /* {{{ proto mixed memcache_get( object memcache, mixed key [, mixed &flags [, mixed &cas ] ] )
    Returns value of existing item or false */
