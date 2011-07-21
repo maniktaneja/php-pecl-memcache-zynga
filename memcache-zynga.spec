@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.3
+Version:      2.4.1.4
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,10 @@ fi
 
 
 %changelog
+* Fri Jul 22 2011 <vsatyanarayana@zynga.com> 2.4.1.4
+- Added a key and server info the 'unable to unserialize' log message.
+- Added a key and server info the 'unable to uncompress' log message.
+
 * Tue Apr 19 2011 <vsatyanarayana@zynga.com> 2.4.1.3
 - Fix for a infinite loop in get_by_key api. 
 - Return false if uncompress failed in get_by_key.
