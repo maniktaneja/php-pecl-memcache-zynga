@@ -1629,7 +1629,7 @@ static int mmc_parse_response(mmc_t *mmc, char *response, int response_len, char
 }
 /* }}} */
 
-static int mmc_postprocess_value(const char* key, zval **return_value, char *value, int value_len TSRMLS_DC) /*
+static int mmc_postprocess_value(const char* key, const char* host, zval **return_value, char *value, int value_len TSRMLS_DC) /*
 	post-process a value into a result zval struct, value will be free()'ed during process {{{ */
 {
 	const char *value_tmp = value;
@@ -1637,11 +1637,17 @@ static int mmc_postprocess_value(const char* key, zval **return_value, char *val
 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
 
 	if (!php_var_unserialize(return_value, (const unsigned char **)&value_tmp, (const unsigned char *)(value_tmp + value_len), &var_hash TSRMLS_CC)) {
-		ZVAL_FALSE(*return_value);
-		PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
-		efree(value);
-		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key %s", key);
-		return 0;
+        if (!MEMCACHE_G(debug_mode)) {
+            ZVAL_FALSE(*return_value);
+            PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+            efree(value);
+            php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s fetched from server=%s", key, host);
+            return 0;
+        } else {
+
+            ZVAL_STRINGL(*return_value, value, value_len, 1);
+            php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s fetched from server=%s, raw value returned as zval string", key, host);
+        }
 	}
 
 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
@@ -1677,7 +1683,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 				result = -1;
 			}
 			else if (flags & MMC_SERIALIZED) {
-				result = mmc_postprocess_value(key, return_value, value, value_len TSRMLS_CC);
+				result = mmc_postprocess_value(key, mmc->host, return_value, value, value_len TSRMLS_CC);
 			}
 			else if (0 == cas) {
 				/* no lock error, the cas value should never be zero */
@@ -1812,7 +1818,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 				result = -1;
 			}
 			else if (flags & MMC_SERIALIZED) {
-				result = mmc_postprocess_value(key, return_value, value, value_len TSRMLS_CC);
+				result = mmc_postprocess_value(key, mmc->host, return_value, value, value_len TSRMLS_CC);
 			}
 			else {
 				ZVAL_STRINGL(*return_value, value, value_len, 0);
@@ -2063,7 +2069,7 @@ static int mmc_exec_retrieval_cmd_multi(
 
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
 			key = (zval *)mmc_queue_pop(&serialized_key);
-			if (result = mmc_postprocess_value(key, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+			if (result = mmc_postprocess_value(key, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
 				/* unserialize failed */
 				if (status_array) {
 					add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
@@ -3576,7 +3582,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 						mmc_server_seterror(mmc, "Malformed END line", 0);
 						result = -1;
 					} else if (flags & MMC_SERIALIZED) {
-						result = mmc_postprocess_value(key, &zvalue, value, value_len TSRMLS_CC);
+						result = mmc_postprocess_value(key, mmc->host, &zvalue, value, value_len TSRMLS_CC);
 					} else {
 						ZVAL_STRINGL(zvalue, value, value_len, 0);
 					}
