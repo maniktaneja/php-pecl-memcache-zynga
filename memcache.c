@@ -3834,11 +3834,12 @@ PHP_FUNCTION(memcache_getl)
 PHP_FUNCTION(memcache_findserver)
 {
 	mmc_pool_t *pool;
-	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
-	int timeout = 15;
+	zval *zkey, *mmc_object = getThis();
+
 	char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
-	mmc_t *mmc;
+	
+    mmc_t *mmc;
 
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz",
