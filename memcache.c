@@ -2130,7 +2130,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	if (!memcache_lzo_enabled && (*flags & MMC_COMPRESSED_LZO) && data_len > 0) {
 		mmc_server_seterror(mmc, "Failed to uncompress data - lzo init failed", 0);
 		efree(data);
-		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data for key=%s, server=%s - lzo init failed", *key, mmc->host);
+		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data from server=%s - lzo init failed", mmc->host);
 		return -2;
 	}
 
@@ -2141,7 +2141,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		if (!mmc_uncompress(&result_data, &result_len, data, data_len, *flags)) {
 			mmc_server_seterror(mmc, "Failed to uncompress data", 0);
 			efree(data);
-			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data for key=%s, server=%s", *key, mmc->host);
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data from server=%s", mmc->host);
 			return -2;
 		}
 
