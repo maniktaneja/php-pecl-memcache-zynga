@@ -3049,6 +3049,11 @@ PHP_FUNCTION(memcache_get_version)
 	}
 
 	for (i=0; i<pool->num_servers; i++) {
+
+		if (MEMCACHE_G(proxy_enabled)) {
+			pool->servers[i]->proxy = mmc_get_proxy(TSRMLS_C);
+		}
+
 		if (mmc_open(pool->servers[i], 1, NULL, NULL TSRMLS_CC)) {
 			if ((version = mmc_get_version(pool->servers[i] TSRMLS_CC)) != NULL) {
 				RETURN_STRING(version, 0);
@@ -3599,7 +3604,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 					mmc_server_seterror(mmc, "Malformed END line", 0);
 					result = -1;
 				} else {
-					break;	
+					break;
 				}
 
 			} else if (result < 0) {
@@ -3838,7 +3843,7 @@ PHP_FUNCTION(memcache_findserver)
 
 	char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
-	
+
     mmc_t *mmc;
 
 	if (mmc_object == NULL) {
@@ -4363,6 +4368,10 @@ PHP_FUNCTION(memcache_get_extended_stats)
 		MAKE_STD_ZVAL(stats);
 
 		hostname_len = spprintf(&hostname, 0, "%s:%d", pool->servers[i]->host, pool->servers[i]->port);
+
+		if (MEMCACHE_G(proxy_enabled)) {
+			pool->servers[i]->proxy = mmc_get_proxy(TSRMLS_C);
+		}
 
 		if (mmc_open(pool->servers[i], 1, NULL, NULL TSRMLS_CC)) {
 			if (mmc_get_stats(pool->servers[i], type, slabid, limit, stats TSRMLS_CC) < 0) {

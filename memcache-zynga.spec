@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.4
+Version:      2.4.1.5
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,12 +150,18 @@ fi
 
 
 %changelog
+* Mon Aug 29 2011 <mtaneja@zynga.com> 2.4.1.5
+- Reinitialize mmc->proxy pointers in get_stats and get_version since those pointers
+  may be referencing freed objects. A multiget call creates a bunch of tmp proxy
+  structures that are freed at the end of the multiget. However the mmc->proxy pointers
+  that are pointing to those objects are not initialized to null
+
 * Fri Jul 22 2011 <vsatyanarayana@zynga.com> 2.4.1.4
 - Added a key and server info the 'unable to unserialize' log message.
 - Added a key and server info the 'unable to uncompress' log message.
 
 * Tue Apr 19 2011 <vsatyanarayana@zynga.com> 2.4.1.3
-- Fix for a infinite loop in get_by_key api. 
+- Fix for a infinite loop in get_by_key api.
 - Return false if uncompress failed in get_by_key.
 - status_array was not NULL checked in a couple of places.
 
