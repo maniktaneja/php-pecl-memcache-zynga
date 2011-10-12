@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.5
+Version:      2.4.1.6
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,9 @@ fi
 
 
 %changelog
+* Mon Oct 11 2011 <nigupta@zynga.com> 2.4.1.6
+- Return the compressed value len by reference for add/set/replace/cas operations.
+
 * Mon Aug 29 2011 <mtaneja@zynga.com> 2.4.1.5
 - Reinitialize mmc->proxy pointers in get_stats and get_version since those pointers
   may be referencing freed objects. A multiget call creates a bunch of tmp proxy
