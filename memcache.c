@@ -1517,6 +1517,10 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 }
 /* }}} */
 
+#define VERSION_ERR_STR "Malformed version string :"
+#define VERSION_ERR_STR_S sizeof(VERSION_ERR_STR)-1
+#define MAX_ERR_STR_LEN 256
+
 static char *mmc_get_version(mmc_t *mmc TSRMLS_DC) /* {{{ */
 {
 	char *version_str;
@@ -1535,7 +1539,17 @@ static char *mmc_get_version(mmc_t *mmc TSRMLS_DC) /* {{{ */
 		return version_str;
 	}
 
-	mmc_server_seterror(mmc, "Malformed version string", 0);
+	if (response_len > MAX_ERR_STR_LEN) {
+		response_len = MAX_ERR_STR_LEN;
+	}
+	
+	version_str = emalloc(response_len + VERSION_ERR_STR_S);
+	memcpy(version_str, VERSION_ERR_STR, VERSION_ERR_STR_S);
+	memcpy(version_str + VERSION_ERR_STR_S, mmc->inbuf, response_len);
+
+	mmc_server_seterror(mmc, version_str, 0);
+	
+	efree(version_str);
 	return NULL;
 }
 /* }}} */
