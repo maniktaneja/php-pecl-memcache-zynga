@@ -96,6 +96,7 @@ PHP_FUNCTION(memcache_setproperty);
 #define MMC_SERIALIZED 1
 #define MMC_COMPRESSED 2
 #define MMC_COMPRESSED_LZO 4
+#define MMC_CHKSUM	   8
 #define MMC_DEFAULT_TIMEOUT 10000			/* milli seconds */
 #define MMC_KEY_MAX_SIZE 250				/* stoled from memcached sources =) */
 #define MMC_DEFAULT_RETRY 15 				/* retry failed server after x seconds */
@@ -117,6 +118,8 @@ PHP_FUNCTION(memcache_setproperty);
 
 #define MMC_CONSISTENT_POINTS 160			/* points per server */
 #define MMC_CONSISTENT_BUCKETS 1024			/* number of precomputed buckets, should be power of 2 */
+
+#define MC_CHKSUM_MAGIC	0xbeefbaad
 
 typedef struct mmc {
 	php_stream				*stream;
@@ -174,6 +177,7 @@ typedef struct mmc_pool {
 	void					*hash_state;
 	zend_bool				false_on_error;
 	zval 					*cas_array;
+	zend_bool				enable_checksum;
 } mmc_pool_t;
 
 typedef struct token_s {

@@ -943,6 +943,7 @@ mmc_pool_t *mmc_pool_new(TSRMLS_D) /* {{{ */
 
 	ALLOC_INIT_ZVAL(pool->cas_array);
 	array_init(pool->cas_array);
+	pool->enable_checksum = 0;
 
 	mmc_pool_init_hash(pool TSRMLS_CC);
 
@@ -1041,6 +1042,11 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	unsigned long **cas_lookup;
+	char add_crc_hdr = pool->enable_checksum;
+	char *crc_header = NULL;
+	unsigned int crc_hdr_len = 0;
+	unsigned int crc32 = 0;		// crc header of the compressed data
+	unsigned int uncrc32 = 0;	// crc header of the uncompressed data
 
 	MMC_DEBUG(("mmc_pool_store: key '%s' len '%d'", key, key_len));
 
@@ -1061,7 +1067,13 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		/* skip compression when the command is either append or prepend */
 		if (strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len)) {
 			flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
+			add_crc_hdr = 0;
 		}
+	}
+
+	//compute crc of the data before compression
+	if (add_crc_hdr) {
+		uncrc32 = mmc_hash_crc32(value, value_len); // crc of the uncompressed data
 	}
 
 	if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO)) {
@@ -1087,7 +1099,27 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			efree(data);
 			data = NULL;
 		}
+		//compute crc of the data after compression and only if the data was compressed
+		if (add_crc_hdr && ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO))) {
+			crc32 = mmc_hash_crc32(value, value_len);
+		}
 	}
+
+
+	// create the crc encapsulated header
+	if (uncrc32 || crc32) {
+		crc_header = emalloc(2*MAX_LENGTH_OF_LONG);
+		if (crc32)  {
+ 			crc_hdr_len = sprintf(crc_header, "%x\r%x\r\n", crc32, uncrc32);
+		}
+		else {
+			crc_hdr_len = sprintf(crc_header, "%x\r\n", uncrc32);
+		}
+		flags = flags | MMC_CHKSUM;
+	}
+
+	//increment value_len to accomodate the size of the crc header
+	value_len += crc_hdr_len;
 
 	/*
 	 * if no cas value has been specified, check if we have one stored for this key
@@ -1117,10 +1149,12 @@ retry_store:
 			+ MAX_LENGTH_OF_LONG
 			+ caslen
 			+ sizeof("\r\n") - 1
+			+ crc_hdr_len	/* length of crc header */
 			+ value_len
 			+ sizeof("\r\n") - 1
 			+ 1
 			);
+
 
 	if (caslen) {
 		request_len = sprintf(request, "cas %s %d %d %d %lu\r\n", key, flags, expire, value_len, cas);
@@ -1128,7 +1162,14 @@ retry_store:
 		request_len = sprintf(request, "%s %s %d %d %d\r\n", command, key, flags, expire, value_len);
 	}
 
-	memcpy(request + request_len, value, value_len);
+
+	// copy the checksum into the request before copying the data
+	if (crc_header) {
+		memcpy(request + request_len, crc_header, crc_hdr_len);
+		efree(crc_header);
+	}
+
+	memcpy(request + request_len + crc_hdr_len, value, value_len);
 	request_len += value_len;
 
 	memcpy(request + request_len, "\r\n", sizeof("\r\n") - 1);
@@ -1542,13 +1583,13 @@ static char *mmc_get_version(mmc_t *mmc TSRMLS_DC) /* {{{ */
 	if (response_len > MAX_ERR_STR_LEN) {
 		response_len = MAX_ERR_STR_LEN;
 	}
-	
+
 	version_str = emalloc(response_len + VERSION_ERR_STR_S);
 	memcpy(version_str, VERSION_ERR_STR, VERSION_ERR_STR_S);
 	memcpy(version_str + VERSION_ERR_STR_S, mmc->inbuf, response_len);
 
 	mmc_server_seterror(mmc, version_str, 0);
-	
+
 	efree(version_str);
 	return NULL;
 }
@@ -1711,6 +1752,7 @@ static int mmc_postprocess_value(const char* key, const char* host, zval **retur
 	return 1;
 }
 /* }}} */
+
 
 int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas, int timeout TSRMLS_DC) /* {{{ */
 {
@@ -2144,6 +2186,28 @@ static int mmc_exec_retrieval_cmd_multi(
 }
 /* }}} */
 
+
+static char *get_key(char *inbuf)
+{
+	static char *key = NULL;
+	int i = 0;
+
+	if (key == NULL) {
+		key = emalloc(1024);
+	}
+
+	bzero(key, 1024);
+
+	while(*inbuf++  != 0x20); //skip whitespace
+
+	while(*inbuf != 0x20 && i < 1024 && *inbuf != '\n') {
+		*(key + i++) = *inbuf++;
+	}
+
+	return key;
+}
+
+
 static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, int *value_len, int *flags, unsigned long *cas TSRMLS_DC) /* {{{ */
 {
 	char *data;
@@ -2190,24 +2254,113 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		return -2;
 	}
 
+	//if the data was encapsulated with the crc header then extract the crc header
+	//and check for data sanity before uncompression
+	unsigned int crc_value = 0;
+	unsigned int uncrc_value = 0;
+	char *hp = data;
+	unsigned int crc_hdr_len = 0;
+
+	if (*flags & MMC_CHKSUM) {
+		// get the crc of the compressed data
+		char crc32[MAX_LENGTH_OF_LONG] = {0};
+		char uncrc32[MAX_LENGTH_OF_LONG] = {0};
+		char *p = NULL;
+		int i = 0;
+
+		if ((*flags & MMC_COMPRESSED) || (*flags & MMC_COMPRESSED_LZO)) {
+			p = crc32;
+			while (*hp != '\r' && (i++ < data_len)) {
+				*p++ = *hp++;
+			}
+			hp++; // skip over the first \r
+			crc_value = strtol(crc32, NULL, 16);
+		}
+
+		p = uncrc32;
+
+		while(*hp != '\r' && (i++ < data_len)) {
+			*p++ = *hp++;
+		}
+		uncrc_value = strtol(uncrc32, NULL, 16);
+
+		while(*hp++ != '\n' && (i++ < data_len));
+
+		if (i >= data_len) {
+			// the crc data is not in the right format. fail
+			char *key = NULL;
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format. Key %s", get_key(mmc->inbuf));
+			efree(data);
+			return -2;
+		}
+		crc_hdr_len = hp - data;
+	}
+
 	if (((*flags & MMC_COMPRESSED) || (*flags & MMC_COMPRESSED_LZO)) && data_len > 0) {
 		char *result_data;
 		unsigned long result_len = 0;
 
-		if (!mmc_uncompress(&result_data, &result_len, data, data_len, *flags)) {
+		if (crc_value) {
+			// compute checksum of the compressed data
+			unsigned int crc = mmc_hash_crc32(hp, data_len - crc_hdr_len);
+			if (crc != crc_value) {
+				char *key = NULL;
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on compressed data. Key %s", get_key(mmc->inbuf));
+				efree(data);
+				return -2;
+			}
+		}
+
+		if (!mmc_uncompress(&result_data, &result_len, hp, data_len - crc_hdr_len, *flags)) {
 			mmc_server_seterror(mmc, "Failed to uncompress data", 0);
 			efree(data);
 			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data from server=%s", mmc->host);
 			return -2;
 		}
 
+		if (uncrc_value) {
+			// compute checksum of the compressed data
+			unsigned int crc = mmc_hash_crc32(result_data, result_len);
+			if (crc != uncrc_value) {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s", get_key(mmc->inbuf));
+				efree(data);
+				return -2;
+			}
+		}
 		efree(data);
 		data = result_data;
 		data_len = result_len;
+
+	} else if (crc_hdr_len) {
+		char *result_data;
+		unsigned long result_len = 0;
+
+		if (uncrc_value) {
+			// compute checksum of the compressed data
+			unsigned int crc = mmc_hash_crc32(hp, data_len - crc_hdr_len);
+			if (crc != uncrc_value) {
+				char *key = NULL;
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s", get_key(mmc->inbuf));
+				efree(data);
+				return -2;
+			}
+		}
+
+
+		result_len = data_len - crc_hdr_len;
+		result_data = emalloc(result_len);
+		memcpy(result_data, data + crc_hdr_len, result_len);
+		efree(data);
+		*value = result_data;
+		*value_len = result_len;
+
+		return 1;
 	}
 
 	*value = data;
 	*value_len = data_len;
+
+
 	return 1;
 }
 /* }}} */
@@ -3146,7 +3299,7 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * comman
 		}
 	}
 
-	if (val_len) {	
+	if (val_len) {
 		convert_to_long(val_len);
 	}
 
@@ -3453,7 +3606,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 	array_init(*return_value);
 	if (val_len) {
 		array_init(*val_len);
-	}	
+	}
 	zval *tmp;
 	MAKE_STD_ZVAL(tmp);
 
@@ -4787,6 +4940,12 @@ PHP_FUNCTION(memcache_setproperty)
 				if (mmc->proxy_str)
 					mmc->proxy_str[0] = use_binary ? 'B' : 'A';
 			}
+		}
+	}
+
+	if (strncasecmp(prop, "EnableChecksum", prop_len) == 0) {
+		if (val != NULL && Z_TYPE_P(val) == IS_BOOL) {
+			pool->enable_checksum = Z_BVAL_P(val);
 		}
 	}
 

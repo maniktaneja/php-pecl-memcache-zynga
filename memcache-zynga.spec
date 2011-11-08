@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.6
+Version:      2.4.1.7
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,12 @@ fi
 
 
 %changelog
+* Wed Nov 02 2011 <mtaneja@zynga.com> 2.4.1.7
+- Add a setproperty option 'EnableChecksum'. When this property is set,
+  crc checksums of both the compressed and uncompressed data will be
+  prepended to the outgoing payload. These checksums if present are verified
+  on the corresponding fetch operation
+
 * Mon Oct 11 2011 <nigupta@zynga.com> 2.4.1.6
 - Return the compressed value len by reference for add/set/replace/cas operations.
 

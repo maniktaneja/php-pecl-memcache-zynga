@@ -6,10 +6,6 @@ $memcache = new memcache;
 
 $memcache->debug(DEBUG);
 $memcache->addServer("localhost", 11211);
-$memcache->addServer("localhost1", 11211);
-$memcache->addServer("localhost2", 11211);
-$memcache->addServer("localhost3", 11211);
-$memcache->addServer("localhost4", 11211);
 
 if ($memcache) {
 	$timeout = 1209600;
