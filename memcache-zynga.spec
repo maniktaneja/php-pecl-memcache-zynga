@@ -155,6 +155,11 @@ fi
   crc checksums of both the compressed and uncompressed data will be
   prepended to the outgoing payload. These checksums if present are verified
   on the corresponding fetch operation
+- Misc Fixes
+  + Move test files into test directory
+  + Fix crash in php_shutdown
+  + Correct use thread safe TSRM constructs
+  + Fix memory leak when multiGet fails
 
 * Mon Oct 11 2011 <nigupta@zynga.com> 2.4.1.6
 - Return the compressed value len by reference for add/set/replace/cas operations.

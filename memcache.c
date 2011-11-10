@@ -56,6 +56,11 @@ static int le_memcache_pool, le_pmemcache;
 static zend_class_entry *memcache_class_entry_ptr;
 static int memcache_lzo_enabled;
 
+static void php_memcache_destroy_globals(zend_memcache_globals *memcache_globals_p TSRMLS_DC)
+{
+}
+
+
 ZEND_DECLARE_MODULE_GLOBALS(memcache)
 
 ZEND_BEGIN_ARG_INFO(memcache_get2_arginfo, 0)
@@ -450,11 +455,11 @@ static int mmc_parse_response(mmc_t *mmc, char *, int, char **, int *, int *, un
 static int mmc_exec_retrieval_cmd_multi(mmc_pool_t *, zval *, zval **, zval **, zval *, zval * TSRMLS_DC);
 static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsigned long * TSRMLS_DC);
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
-static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC);
-static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len TSRMLS_DC);
+static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key);
+static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len);
 static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, long cas, char *shard_key, int shard_key_len, char *, int, zend_bool,zval *val_len);
-static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
-static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
+static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas TSRMLS_DC);
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout TSRMLS_DC);
 static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
 static int mmc_incr_decr(mmc_t *, int, char *, int, int, long * TSRMLS_DC);
@@ -508,7 +513,7 @@ PHP_MINIT_FUNCTION(memcache)
 	le_pmemcache = zend_register_list_destructors_ex(NULL, _mmc_pserver_list_dtor, "persistent memcache connection", module_number);
 
 #ifdef ZTS
-	ts_allocate_id(&memcache_globals_id, sizeof(zend_memcache_globals), (ts_allocate_ctor) php_memcache_init_globals, NULL);
+	ts_allocate_id(&memcache_globals_id, sizeof(zend_memcache_globals), (ts_allocate_ctor) php_memcache_init_globals, (ts_allocate_dtor)php_memcache_destroy_globals);
 #else
 	php_memcache_init_globals(&memcache_globals TSRMLS_CC);
 #endif
@@ -532,6 +537,12 @@ PHP_MINIT_FUNCTION(memcache)
  */
 PHP_MSHUTDOWN_FUNCTION(memcache)
 {
+#ifdef ZTS
+	ts_free_id(memcache_globals_id);
+#else
+	php_memcache_destroy_globals(&memcache_globals TSRMLS_CC);
+#endif
+
 	UNREGISTER_INI_ENTRIES();
 	return SUCCESS;
 }
@@ -1183,9 +1194,9 @@ retry_store:
 
 	while (result < 0) {
 		if (by_key) {
-			mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC);
+			mmc = mmc_pool_find(pool, shard_key, shard_key_len);
 		} else {
-			mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC);
+			mmc = mmc_pool_find(pool, key, key_len);
 		}
 
 		if(mmc == NULL) {
@@ -1769,7 +1780,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	command_len = (timeout) ? spprintf(&command, 0, "getl %s %d", key, timeout):
 									spprintf(&command, 0, "getl %s", key);
 
-	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len)) != NULL) {
 		MMC_DEBUG(("mmc_exec_getl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
 
 		/* send command and read value */
@@ -1855,7 +1866,7 @@ int mmc_exec_unl_cmd(mmc_pool_t *pool, const char *key, int key_len, unsigned lo
 
 	command_len = spprintf(&command, 0, "unl %s %lu", key, cas);
 
-	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len)) != NULL) {
 		MMC_DEBUG(("mmc_exec_unl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
 		if (mmc_sendcmd(mmc, command, command_len TSRMLS_CC) < 0) {
 			efree(command);
@@ -1895,7 +1906,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 	command_len = (pcas != NULL)? spprintf(&command, 0, "gets %s", key):
 									spprintf(&command, 0, "get %s", key);
 
-	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len)) != NULL) {
 		MMC_DEBUG(("mmc_exec_retrieval_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
 
 		/* send command and read value */
@@ -2054,7 +2065,7 @@ static int mmc_exec_retrieval_cmd_multi(
 			if (mmc_prepare_key(*zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
 				/* schedule key if first round or if missing from result */
 				if ((!i || !zend_hash_exists(Z_ARRVAL_PP(return_value), key, key_len)) &&
-					(mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL) {
+					(mmc = mmc_pool_find(pool, key, key_len)) != NULL) {
 					if (!(mmc->outbuf.len)) {
 						smart_str_appendl(&(mmc->outbuf), pcas != NULL? "gets": "get",
 						                  pcas != NULL? sizeof("gets")-1: sizeof("get")-1);
@@ -2666,6 +2677,7 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 
 static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, long cas, char *shard_key, int shard_key_len, char *command, int command_len, zend_bool by_key, zval *val_len) /* {{{ */
 {
+	TSRMLS_FETCH();
 	mmc_pool_t *pool;
 	int result;
 	char key_tmp[MMC_KEY_MAX_SIZE];
@@ -2763,6 +2775,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 
 static void php_mmc_incr_decr(mmc_pool_t *pool, char *key, int key_len, char *shard_key, int shard_key_len, long value, zend_bool by_key, int cmd, zval **return_value) /* {{{ */
 {
+	TSRMLS_FETCH();
 	mmc_t *mmc;
 	int result = -1;
 	long number;
@@ -2770,9 +2783,9 @@ static void php_mmc_incr_decr(mmc_pool_t *pool, char *key, int key_len, char *sh
 	while (result < 0) {
 
 		if (by_key) {
-			mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC);
+			mmc = mmc_pool_find(pool, shard_key, shard_key_len);
 		} else {
-			mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC);
+			mmc = mmc_pool_find(pool, key, key_len);
 		}
 
 		if(mmc == NULL) {
@@ -2913,6 +2926,7 @@ mmc_t *mmc_get_proxy(TSRMLS_D) /* {{{ */
 	int errnum = 0;
 	mmc_t *mmc;
 
+	MEMCACHE_G(proxy_hostlen) = 0;
 	host = MEMCACHE_G(proxy_host);
 	port = MEMCACHE_G(proxy_port);
 	host_len = MEMCACHE_G(proxy_hostlen);
@@ -3277,7 +3291,7 @@ PHP_FUNCTION(memcache_get_version)
 }
 /* }}} */
 
-static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC) {
+static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key) {
 	zval *value;
 	zval *mmc_object = getThis();
 	int key_len;
@@ -3311,7 +3325,7 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * comman
 	return;
 }
 
-static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len TSRMLS_DC) {
+static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len) {
 	zval *zkey_array;
 	zval *mmc_object = getThis();
 	zval *val_len = 0;
@@ -3440,7 +3454,7 @@ PHP_FUNCTION(memcache_get2)
 
 	zend_bool old_false_on_failure = pool->false_on_error;
 	pool->false_on_error = 1;
-	php_mmc_get(pool, zkey, &tmp, &return_value, flags, cas);
+	php_mmc_get(pool, zkey, &tmp, &return_value, flags, cas TSRMLS_CC);
 	pool->false_on_error = old_false_on_failure;
 
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
@@ -3809,7 +3823,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 			spprintf(&command, 0, "get %s", key);
 		ZVAL_NULL(zvalue);
 
-		while (result < 0 && (mmc = mmc_pool_find(pool, shardKey, shardKey_len TSRMLS_CC)) != NULL) {
+		while (result < 0 && (mmc = mmc_pool_find(pool, shardKey, shardKey_len)) != NULL) {
 			MMC_DEBUG(("php_mmc_get_by_key: found server '%s:%d' for key '%s' and shardKey '%s'", mmc->host, mmc->port, key, shardKey));
 
 			/* send command and read value */
@@ -4028,6 +4042,9 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 					add_assoc_zval(value_array, "cas", cas);
 				} else {
 					MMC_DEBUG(("php_mmc_get_multi_by_key: Nothing returned from Get for key '%s'", input_key));
+					zval_ptr_dtor(&flags);
+					zval_ptr_dtor(&cas);
+					zval_ptr_dtor(&zvalue);
 					add_assoc_null(value_array, "value");
 				}
 			}
@@ -4037,6 +4054,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Key passed in wasn't a string type");
 		}
 	}
+
 
 	MMC_DEBUG(("php_mmc_get_multi_by_key: Exit"));
 }
@@ -4064,7 +4082,7 @@ PHP_FUNCTION(memcache_getl)
 		RETURN_FALSE;
 	}
 
-	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
+	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout TSRMLS_CC);
 }
 /* {{{ proto string memcache_findserver(object memcache, mixed key)
    Computes the hash of the key and finds the exact server in the pool to which this key will be mapped. Returns that host as a string.
@@ -4097,7 +4115,7 @@ PHP_FUNCTION(memcache_findserver)
 
 	if (Z_TYPE_P(zkey) != IS_ARRAY) {
 		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
-			if ((mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) == NULL) {
+			if ((mmc = mmc_pool_find(pool, key, key_len)) == NULL) {
 				zval_dtor(return_value);
 				ZVAL_FALSE(return_value);
 			} else { // we found the server
@@ -4163,10 +4181,10 @@ PHP_FUNCTION(memcache_get)
 		RETURN_FALSE;
 	}
 
-	php_mmc_get(pool, zkey, &return_value, NULL, flags, cas);
+	php_mmc_get(pool, zkey, &return_value, NULL, flags, cas TSRMLS_CC);
 }
 
-static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout) /* {{{ */
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout TSRMLS_DC) /* {{{ */
 {
 	char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
@@ -4223,7 +4241,7 @@ static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTE
 		zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
 }
 
-static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas) /* {{{ */
+static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas TSRMLS_DC) /* {{{ */
 {
 	char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
@@ -4281,7 +4299,7 @@ PHP_FUNCTION(memcache_delete)
 		RETURN_FALSE;
 	}
 
-	while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len TSRMLS_CC)) != NULL) {
+	while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len)) != NULL) {
 		if ((result = mmc_delete(mmc, key_tmp, key_tmp_len, time TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
@@ -4401,7 +4419,7 @@ static int php_mmc_delete_by_key(mmc_pool_t *pool, char *key, int key_len, char 
 	int result = -1;
 
 	while (result < 0) {
-		mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC);
+		mmc = mmc_pool_find(pool, shard_key, shard_key_len);
 
 		if (mmc == NULL) {
 			break;

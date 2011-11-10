@@ -253,7 +253,7 @@ PS_DESTROY_FUNC(memcache)
 			return FAILURE;
 		}
 
-		while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len TSRMLS_CC)) != NULL) {
+		while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len)) != NULL) {
 			if ((result = mmc_delete(mmc, key_tmp, key_tmp_len, 0 TSRMLS_CC)) < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);
 			}

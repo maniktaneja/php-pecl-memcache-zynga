@@ -152,7 +152,7 @@ typedef mmc_t * (*mmc_hash_find_server)(void *, const char *, int, zend_bool TSR
 typedef void (*mmc_hash_add_server)(void *, mmc_t *, unsigned int);
 
 #define mmc_pool_find(pool, key, key_len) \
-	pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled)
+	pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled TSRMLS_CC)
 
 typedef struct mmc_hash {
 	mmc_hash_create_state	create_state;
