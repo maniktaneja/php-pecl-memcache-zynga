@@ -55,6 +55,10 @@
 static int le_memcache_pool, le_pmemcache;
 static zend_class_entry *memcache_class_entry_ptr;
 static int memcache_lzo_enabled;
+static void php_memcache_destroy_globals(zend_memcache_globals *memcache_globals_p TSRMLS_DC)
+{
+}
+
 
 ZEND_DECLARE_MODULE_GLOBALS(memcache)
 
