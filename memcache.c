@@ -1128,9 +1128,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		flags = flags | MMC_CHKSUM;
 	}
 
-	//increment value_len to accomodate the size of the crc header
-	value_len += crc_hdr_len;
-
 	/*
 	 * if no cas value has been specified, check if we have one stored for this key
 	 * only set operations will be converted to cas
@@ -1180,7 +1177,7 @@ retry_store:
 	}
 
 	memcpy(request + request_len + crc_hdr_len, value, value_len);
-	request_len += value_len;
+	request_len += value_len + crc_hdr_len;
 
 	memcpy(request + request_len, "\r\n", sizeof("\r\n") - 1);
 	request_len += sizeof("\r\n") - 1;

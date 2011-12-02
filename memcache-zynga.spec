@@ -8,7 +8,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.8
+Version:      2.4.1.9
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -150,6 +150,10 @@ fi
 
 
 %changelog
+* Fri Dec 03 2011 <mtaneja@zynga.com> 2.4.1.9
+ - Fix read access violation due to incorrect calculation of value_len in
+   mmc_pool_store
+
 * Wed Nov 16 2011 <mtaneja@zynga.com> 2.4.1.8
  - Reverse all TSRM related changes
 
