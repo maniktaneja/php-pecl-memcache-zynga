@@ -121,8 +121,9 @@ mmc_t *mmc_standard_find_server(void *s, const char *key, int key_len, zend_bool
     } else {
         mmc->proxy = NULL;
     }
-
-	return mmc->status != MMC_STATUS_FAILED ? mmc : NULL;
+	
+	//return mmc->status != MMC_STATUS_FAILED ? mmc : NULL;
+	return mmc;
 }
 /* }}} */
 

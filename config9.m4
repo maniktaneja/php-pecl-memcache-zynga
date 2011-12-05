@@ -44,6 +44,7 @@ if test "$PHP_MEMCACHE" != "no"; then
         PHP_ZLIB_INCDIR="$i/include"
       fi
     done
+        
   fi
 
   dnl # zlib
@@ -61,6 +62,7 @@ if test "$PHP_MEMCACHE" != "no"; then
     fi
     PHP_ADD_INCLUDE($PHP_ZLIB_INCDIR)
   fi
+
  
   if test "$PHP_MEMCACHE_SESSION" != "no"; then 
 	AC_MSG_CHECKING([for session includes])
@@ -98,6 +100,17 @@ if test "$PHP_MEMCACHE" != "no"; then
   AC_CHECK_SIZEOF(size_t)
   AC_CHECK_SIZEOF(ptrdiff_t)
   AC_C_CONST
+
+  AC_MSG_CHECKING([for logging parsing library])
+  PHP_PARSELIB_DIR="/usr/local/lib64"
+  PHP_PARSELIB_INCPATH="/usr/local/include/libzparse"
+  if test -f "$PHP_PARSELIB_INCPATH/log.h"; then
+    PHP_ADD_LIBRARY_WITH_PATH(zparse, $PHP_PARSELIB_DIR, MEMCACHE_SHARED_LIBADD) 
+    PHP_ADD_INCLUDE($PHP_PARSELIB_INCPATH)
+    PHP_SUBST(MEMCACHE_SHARED_LIBADD)
+  else
+    AC_MSG_ERROR([Cannot find parsing library for logging - php-pecl-lib-zparse])  
+  fi  
 
   AC_MSG_CHECKING([for memcache session support])
   if test "$PHP_MEMCACHE_SESSION" != "no"; then

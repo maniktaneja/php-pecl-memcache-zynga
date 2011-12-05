@@ -37,6 +37,7 @@ extern zend_module_entry memcache_module_entry;
 
 #include "ext/standard/php_smart_str_public.h"
 #include "minilzo.h"
+#include "logger.h"
 
 PHP_MINIT_FUNCTION(memcache);
 PHP_MSHUTDOWN_FUNCTION(memcache);
@@ -89,8 +90,9 @@ PHP_FUNCTION(memcache_flush);
 PHP_FUNCTION(memcache_setoptimeout);
 PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
+PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.9"
+#define PHP_MEMCACHE_VERSION "2.5.0.0"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED 1
@@ -121,6 +123,7 @@ PHP_FUNCTION(memcache_setproperty);
 
 #define MC_CHKSUM_MAGIC	0xbeefbaad
 
+
 typedef struct mmc {
 	php_stream				*stream;
 	char					inbuf[MMC_BUF_SIZE];
@@ -142,6 +145,8 @@ typedef struct mmc {
 	zend_bool				in_free;
 	struct mmc				*proxy;
 	struct mmc				*next;
+    struct timeval 			request_time;   
+    struct timeval 			response_time;   
 } mmc_t;
 
 /* hashing strategy */
@@ -178,6 +183,7 @@ typedef struct mmc_pool {
 	zend_bool				false_on_error;
 	zval 					*cas_array;
 	zend_bool				enable_checksum;
+	char  					*log_name;
 } mmc_pool_t;
 
 typedef struct token_s {
@@ -211,6 +217,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	zend_bool in_multi;
 	zend_bool proxy_connect_failed;
 	mmc_t * temp_proxy_list;
+	char *log_conf;
     lzo_align_t __LZO_MMODEL lzo_wmem[ ((LZO1X_1_MEM_COMPRESS) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ];
 ZEND_END_MODULE_GLOBALS(memcache)
 
@@ -232,15 +239,24 @@ int mmc_prepare_key_ex(const char *, unsigned int, char *, unsigned int * TSRMLS
 mmc_pool_t *mmc_pool_new(TSRMLS_D);
 void mmc_pool_free(mmc_pool_t * TSRMLS_DC);
 void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
-int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int, zval *val TSRMLS_DC);
+int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int ,zval *val, mc_logger_t *pLog TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
-int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
-int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
+int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval *, mc_logger_t * TSRMLS_DC);
+int mmc_delete(mmc_t *, const char *, int, int, mc_logger_t * TSRMLS_DC);
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
+
+#define LOG_RESCODE_SET(mmc, code) if (mmc->log) mmc->log->res_code = code; 
+#define LOG_RECV_TIME(mmc) gettimeofday(&(mmc->request_time), 0);	
+#define LOG_SEND_TIME(mmc) gettimeofday(&(mmc->response_time), 0);	
+
+#define diff_time(mmc)                           								   \
+     (mmc->request_time.tv_sec - mmc->response_time.tv_sec) * 1000 * 1000 +        \
+     (mmc->request_time.tv_usec - mmc->response_time.tv_usec)                      \
+
 
 /* session handler struct */
 #if HAVE_MEMCACHE_SESSION

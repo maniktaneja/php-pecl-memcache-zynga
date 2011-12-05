@@ -5,10 +5,11 @@
 
 %define pecl_name memcache-zynga
 %define module_name memcache
+%define log_dir /etc/pecl-log 
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.9
+Version:      2.5.0.0
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -29,7 +30,7 @@ Requires:     php(zend-abi) = %{php_zend_api}
 %else
 #Requires:     php-api = %{php_apiver}
 %endif
-Requires:     php >= %{php_version}
+Requires:     php >= %{php_version}, php-pecl-lib-zparse
 Conflicts:    php-pecl(memcache)
 
 %description
@@ -113,6 +114,7 @@ extension=%{module_name}.so
 ;session.save_path="tcp://localhost:11211?persistent=1&weight=1&timeout=1&retry_interval=15"
 ; Option to enable the number of retries on a persistent connection
 ;memcache.connection_retry_count=0
+memcache.log_conf = %{log_dir}/logconf
 EOF
 
 # Install XML package description
@@ -121,6 +123,21 @@ EOF
 #%{__install} -m 644 ../package.xml %{buildroot}%{pecl_xmldir}/%{name}.xml
 %{__install} -m 644 package.xml %{buildroot}%{pecl_xmldir}/%{name}.xml
 
+%{__mkdir_p} %{buildroot}%{log_dir}
+%{__cat} > %{buildroot}%{log_dir}/logconf << 'EOF'
+default
+EOF
+%{__mkdir_p} %{buildroot}/etc/logrotate.d
+%{__cat} > %{buildroot}/etc/logrotate.d/pecl << 'EOF'
+/var/log/pecl-memcache.log {
+  sharedscripts
+    notifempty
+    missingok
+    postrotate
+        /bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
+    endscript
+}
+EOF
 
 %clean
 %{__rm} -rf %{buildroot}
@@ -129,6 +146,13 @@ EOF
 %if 0%{?pecl_install:1}
 %post
 %{pecl_install} %{pecl_xmldir}/%{name}.xml >/dev/null || :
+if [ -f /etc/syslog-ng/syslog-ng.conf ];then
+sed /pecl_log/d /etc/syslog-ng/syslog-ng.conf > /tmp/back
+mv /tmp/back /etc/syslog-ng/syslog-ng.conf
+echo 'destination d_pecl_log { file("/var/log/pecl-memcache.log" owner("root") group ("root") perm(0644) ); }; 
+filter f_pecl_log { facility(local4) and level(debug) and match('pecl-memcache'); };                             
+log { source(s_sys); filter(f_pecl_log); destination(d_pecl_log); };' >> /etc/syslog-ng/syslog-ng.conf
+fi                            
 %endif
 
 
@@ -147,9 +171,14 @@ fi
 %config(noreplace) %{_sysconfdir}/php.d/%{module_name}.ini
 %{php_extdir}/%{module_name}.so
 %{pecl_xmldir}/%{name}.xml
+%{log_dir} 
+/etc/logrotate.d/pecl
 
 
 %changelog
+* Fri Dec 5 2011 <nigupta@zynga.com> 2.5.0.0
+- Logging changes for pecl-memcache. Now pecl-memcache has dependency on libzparse.
+
 * Fri Dec 03 2011 <mtaneja@zynga.com> 2.4.1.9
  - Fix read access violation due to incorrect calculation of value_len in
    mmc_pool_store
