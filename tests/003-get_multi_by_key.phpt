@@ -5,7 +5,7 @@ check setMultiByKey method
 --FILE--
 <?php
 $memcache = new Memcache();
-$memcache->addServer("192.168.1.4",11211);
+$memcache->addServer("localhost",11211);
 
 $values = array();
 $keys = array(
@@ -33,7 +33,7 @@ echo  $status["brent"]["value"] . PHP_EOL;
 value
 123
 1
-tes
+
 567
 1
 
