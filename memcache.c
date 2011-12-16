@@ -2400,12 +2400,12 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		char uncrc_buf[MMC_CHKSUM_LEN] = {0};
 		int i = 0, j = 0, min_len = 0;
 
-#define MIN(a,b) a < b ? a : b
+#define PECL_MIN(a,b) a < b ? a : b
 
 		if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
 			// Reading compressed crc checksum	
 
-			min_len = MIN(data_len, MMC_CHKSUM_LEN);
+			min_len = PECL_MIN(data_len, MMC_CHKSUM_LEN);
 
 			for (i = 0; i < min_len && data[i] != '\r'; i++) {
 				crc_buf[i] = data[i];
@@ -2437,7 +2437,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			}
 		}
 
-		min_len = MIN(data_len-i, MMC_CHKSUM_LEN);
+		min_len = PECL_MIN(data_len-i, MMC_CHKSUM_LEN);
 
 		for (j = 0; j < min_len && data[j+i] != '\r'; j++) {
 			uncrc_buf[j] = data[i+j];
@@ -2471,6 +2471,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		crc_hdr_len = i+2;
 		hp = data + crc_hdr_len;
 	}
+#undef PECL_MIN
 
 	if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
 		char *result_data;
@@ -2543,7 +2544,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	*value = data;
 	*value_len = data_len;
 
-
+	
 	return 1;
 }
 /* }}} */
