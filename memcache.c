@@ -759,30 +759,23 @@ static void mmc_server_received_error(mmc_t *mmc, int response_len)  /* {{{ */
 	if (mmc_str_left(mmc->inbuf, "ERROR", response_len, sizeof("ERROR") - 1)) {
 		mmc->inbuf[response_len < MMC_BUF_SIZE - 1 ? response_len : MMC_BUF_SIZE - 1] = '\0';
 		mmc_server_seterror(mmc, mmc->inbuf, 0);
-//		LOG_CODE_SET_AND_PUBLISH(pLog, MC_ERROR);
 	}
 	if (mmc_str_left(mmc->inbuf, "CLIENT_ERROR", response_len, sizeof("CLIENT_ERROR") - 1))
 	{
 		mmc->inbuf[response_len < MMC_BUF_SIZE - 1 ? response_len : MMC_BUF_SIZE - 1] = '\0';
 		mmc_server_seterror(mmc, mmc->inbuf, 0);
-//		LOG_CODE_SET_AND_PUBLISH(pLog, MC_CLNT_ERROR);
-		//mmc_set_err(mmc->error);
 	}
 	if (mmc_str_left(mmc->inbuf, "SERVER_ERROR", response_len, sizeof("SERVER_ERROR") - 1))
 	{
 		mmc->inbuf[response_len < MMC_BUF_SIZE - 1 ? response_len : MMC_BUF_SIZE - 1] = '\0';
 		mmc_server_seterror(mmc, mmc->inbuf, 0);
-//		LOG_CODE_SET_AND_PUBLISH(pLog, MC_SERVER_ERROR);
-		//mmc_set_err(mmc->error);
 	}
 	else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", response_len, sizeof("NOT_FOUND") - 1))
 	{
 		mmc_server_seterror(mmc, "Key does not exist or the Queue specified is not a valid one", 0);
-//		LOG_CODE_SET_AND_PUBLISH(pLog, MC_NOT_FOUND);
 	}
 	else {
 		mmc_server_seterror(mmc, "Received malformed response", 0);
-//		LOG_CODE_SET_AND_PUBLISH(pLog, MC_MALFORMD);
 	}
 }
 /* }}} */
@@ -1098,10 +1091,10 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	unsigned long **cas_lookup;
 	char add_crc_hdr = pool->enable_checksum;
-	char *crc_header = NULL;
 	unsigned int crc_hdr_len = 0;
 	unsigned int crc32 = 0;		// crc header of the compressed data
 	unsigned int uncrc32 = 0;	// crc header of the uncompressed data
+	char crc_header[MAX_CRC_BUF] = {0};
 
 	MMC_DEBUG(("mmc_pool_store: key '%s' len '%d'", key, key_len));
 
@@ -1161,18 +1154,20 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		}
 	}
 
-
 	// create the crc encapsulated header
 	if (uncrc32 || crc32) {
-		crc_header = emalloc(2*MAX_LENGTH_OF_LONG);
 		if (crc32)  {
- 			crc_hdr_len = sprintf(crc_header, "%x\r%x\r\n", crc32, uncrc32);
+ 			crc_hdr_len = snprintf(crc_header, MAX_CRC_BUF,  "%x\r%x\r\n", crc32, uncrc32);
+		} else {
+			crc_hdr_len = snprintf(crc_header, MAX_CRC_BUF, "%x\r\n", uncrc32);
 		}
-		else {
-			crc_hdr_len = sprintf(crc_header, "%x\r\n", uncrc32);
-		}
-		flags = flags | MMC_CHKSUM;
+		flags |= MMC_CHKSUM;
+	} else {
+		flags &= ~MMC_CHKSUM;
 	}
+
+   //increment value_len to accomodate the size of the crc header
+    value_len += crc_hdr_len;
 
 	/*
 	 * if no cas value has been specified, check if we have one stored for this key
@@ -1200,9 +1195,9 @@ retry_store:
 			+ MAX_LENGTH_OF_LONG
 			+ 1 /* space */
 			+ MAX_LENGTH_OF_LONG
+			+ 1 /* space */
 			+ caslen
 			+ sizeof("\r\n") - 1
-			+ crc_hdr_len	/* length of crc header */
 			+ value_len
 			+ sizeof("\r\n") - 1
 			+ 1
@@ -1217,13 +1212,12 @@ retry_store:
 
 
 	// copy the checksum into the request before copying the data
-	if (crc_header) {
+	if (crc_hdr_len) {
 		memcpy(request + request_len, crc_header, crc_hdr_len);
-		efree(crc_header);
 	}
 
-	memcpy(request + request_len + crc_hdr_len, value, value_len);
-	request_len += value_len + crc_hdr_len;
+	memcpy(request + request_len + crc_hdr_len, value, value_len - crc_hdr_len);
+	request_len += value_len;
 
 	memcpy(request + request_len, "\r\n", sizeof("\r\n") - 1);
 	request_len += sizeof("\r\n") - 1;
@@ -2382,6 +2376,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		}
 	}
 
+	/* Null termination is needed to make a valid php string, required to work for 
+		php functions like is_numeric */
 	data[data_len] = '\0';
 
 	if (!memcache_lzo_enabled && (*flags & MMC_COMPRESSED_LZO) && data_len > 0) {
@@ -2393,47 +2389,90 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 	//if the data was encapsulated with the crc header then extract the crc header
 	//and check for data sanity before uncompression
-	unsigned int crc_value = 0;
-	unsigned int uncrc_value = 0;
+	long crc_value = 0;
+	long uncrc_value = 0;
 	char *hp = data;
 	unsigned int crc_hdr_len = 0;
 
 	if (*flags & MMC_CHKSUM) {
 		// get the crc of the compressed data
-		char crc32[MAX_LENGTH_OF_LONG] = {0};
-		char uncrc32[MAX_LENGTH_OF_LONG] = {0};
-		char *p = NULL;
-		int i = 0;
+		char crc_buf[MMC_CHKSUM_LEN] = {0};
+		char uncrc_buf[MMC_CHKSUM_LEN] = {0};
+		int i = 0, j = 0, min_len = 0;
 
-		if ((*flags & MMC_COMPRESSED) || (*flags & MMC_COMPRESSED_LZO)) {
-			p = crc32;
-			while (*hp != '\r' && (i++ < data_len)) {
-				*p++ = *hp++;
+#define MIN(a,b) a < b ? a : b
+
+		if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
+			// Reading compressed crc checksum	
+
+			min_len = MIN(data_len, MMC_CHKSUM_LEN);
+
+			for (i = 0; i < min_len && data[i] != '\r'; i++) {
+				crc_buf[i] = data[i];
 			}
-			hp++; // skip over the first \r
-			crc_value = strtol(crc32, NULL, 16);
+	
+			if (i == data_len) {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format. Key %s Host %s", 
+					get_key(mmc->inbuf), mmc->host);
+				efree(data);
+				return -2;
+			}
+	
+			if (data[i] == '\r') { 
+				crc_value = strtol(crc_buf, NULL, 16);
+				if (crc_value == LONG_MAX || crc_value == LONG_MIN) {
+					php_error_docref(NULL TSRMLS_CC, E_NOTICE, "overflow or undeflow \
+ 						happend with crc checksum Key %s Host %s", get_key(mmc->inbuf), mmc->host);
+					efree(data);
+					return -2;
+				}
+
+				i++; // skip over the first \r
+ 
+			} else {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format. Key %s Host %s", 
+					get_key(mmc->inbuf), mmc->host);
+				efree(data);
+				return -2;
+			}
 		}
 
-		p = uncrc32;
+		min_len = MIN(data_len-i, MMC_CHKSUM_LEN);
 
-		while(*hp != '\r' && (i++ < data_len)) {
-			*p++ = *hp++;
+		for (j = 0; j < min_len && data[j+i] != '\r'; j++) {
+			uncrc_buf[j] = data[i+j];
 		}
-		uncrc_value = strtol(uncrc32, NULL, 16);
 
-		while(*hp++ != '\n' && (i++ < data_len));
-
-		if (i >= data_len) {
+		i += j;
+	
+		if (i == data_len) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format.Key %s Host %s", 
+					get_key(mmc->inbuf), mmc->host);
+			efree(data);
+			return -2;	
+		}
+			
+		if (i+2 < data_len && data[i] == '\r' && data[i+1] == '\n') {
+			uncrc_value = strtol(uncrc_buf, NULL, 16);
+			if (uncrc_value == LONG_MAX || uncrc_value == LONG_MIN) {
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "overflow or undeflow \
+						happend with crc checksum Key %s Host %s", get_key(mmc->inbuf), mmc->host);
+				efree(data);
+				return -2;
+			}
+		} else {
 			// the crc data is not in the right format. fail
-			char *key = NULL;
-			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format. Key %s", get_key(mmc->inbuf));
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed Invalid format.Key %s Host %s", 
+				get_key(mmc->inbuf), mmc->host);
 			efree(data);
 			return -2;
 		}
-		crc_hdr_len = hp - data;
+
+		crc_hdr_len = i+2;
+		hp = data + crc_hdr_len;
 	}
 
-	if (((*flags & MMC_COMPRESSED) || (*flags & MMC_COMPRESSED_LZO)) && data_len > 0) {
+	if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
 		char *result_data;
 		unsigned long result_len = 0;
 
@@ -2442,7 +2481,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			unsigned int crc = mmc_hash_crc32(hp, data_len - crc_hdr_len);
 			if (crc != crc_value) {
 				char *key = NULL;
-				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on compressed data. Key %s", get_key(mmc->inbuf));
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on compressed data. Key %s Host %s",
+					get_key(mmc->inbuf), mmc->host);
 				efree(data);
 				return -2;
 			}
@@ -2459,7 +2499,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			// compute checksum of the compressed data
 			unsigned int crc = mmc_hash_crc32(result_data, result_len);
 			if (crc != uncrc_value) {
-				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s", get_key(mmc->inbuf));
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s Host %s",
+					get_key(mmc->inbuf), mmc->host);
 				efree(data);
 				return -2;
 			}
@@ -2477,7 +2518,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			unsigned int crc = mmc_hash_crc32(hp, data_len - crc_hdr_len);
 			if (crc != uncrc_value) {
 				char *key = NULL;
-				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s", get_key(mmc->inbuf));
+				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "CRC checking failed on uncompressed data. Key %s Host %s",
+			 		get_key(mmc->inbuf), mmc->host);
 				efree(data);
 				return -2;
 			}
@@ -2485,12 +2527,16 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 
 		result_len = data_len - crc_hdr_len;
-		result_data = emalloc(result_len);
+		result_data = emalloc(result_len + 3);
 		memcpy(result_data, data + crc_hdr_len, result_len);
 		efree(data);
+
+		result_data[result_len] = '\r';
+		result_data[result_len+1] = '\n';
+		result_data[result_len+2] = 0;
+		
 		*value = result_data;
 		*value_len = result_len;
-
 		return 1;
 	}
 
@@ -4257,6 +4303,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 			MAKE_STD_ZVAL(zkey);
 			ZVAL_STRING(zkey, str, 1);
 
+			zval_add_ref(data);
 			add_assoc_zval(value_array, "shardKey", *data);
 
 			if ((result = php_mmc_get_by_key(pool, zkey, *data, zvalue, flags, cas TSRMLS_CC)) < 0) {
@@ -4392,7 +4439,7 @@ PHP_FUNCTION(memcache_findserver)
 PHP_FUNCTION(memcache_unlock)
 {
 	zval *mmc_object = getThis(), *zkey = NULL;
-	unsigned long cas;
+	unsigned long cas = 0;
 	mmc_pool_t *pool;
 	mc_logger_t *pLog = get_logger();
 

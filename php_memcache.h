@@ -92,7 +92,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.5.0.0"
+#define PHP_MEMCACHE_VERSION "2.5.0.1"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED 1
@@ -104,6 +104,9 @@ PHP_FUNCTION(memcache_setlogname);
 #define MMC_DEFAULT_RETRY 15 				/* retry failed server after x seconds */
 #define MMC_DEFAULT_SAVINGS 0.2				/* minimum 20% savings for compression to be used */
 #define MMC_DEFAULT_CACHEDUMP_LIMIT	100		/* number of entries */
+#define MMC_CHKSUM_LEN    16
+#define MAX_CRC_BUF 50
+
 
 #define MMC_STATUS_FAILED 0
 #define MMC_STATUS_DISCONNECTED 1
