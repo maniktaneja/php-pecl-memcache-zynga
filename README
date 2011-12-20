@@ -45,3 +45,9 @@ You can download it here: http://www.monkey.org/~provos/libevent/
 Maintainers:
 Mikael Johansson	mikael at synd dot info
 Antony Dovgal		tony at daylessday dot org
+
+zParse dependency
+-----------------
+Due to logging changes, this module is depends on zParse library, 
+which can installed from zynga yum repo.
+

@@ -9,7 +9,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.5.0.1
+Version:      2.4.1.10
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -133,6 +133,8 @@ EOF
   sharedscripts
     notifempty
     missingok
+    size 100M
+    compress 
     postrotate
         /bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
     endscript
@@ -176,10 +178,7 @@ fi
 
 
 %changelog
-* Fri Dec 16 2011 <nigupta@zynga.com> 2.5.0.1
-- Fixing crc checksum, valgrind issues and removing some dead code.
-
-* Fri Dec 5 2011 <nigupta@zynga.com> 2.5.0.0
+* Fri Dec 20 2011 <nigupta@zynga.com> 2.4.1.10
 - Logging changes for pecl-memcache. Now pecl-memcache has dependency on libzparse.
 
 * Fri Dec 03 2011 <mtaneja@zynga.com> 2.4.1.9
