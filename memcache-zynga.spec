@@ -154,7 +154,8 @@ mv /tmp/back /etc/syslog-ng/syslog-ng.conf
 echo 'destination d_pecl_log { file("/var/log/pecl-memcache.log" owner("root") group ("root") perm(0644) ); }; 
 filter f_pecl_log { facility(local4) and level(debug) and match('pecl-memcache'); };                             
 log { source(s_sys); filter(f_pecl_log); destination(d_pecl_log); };' >> /etc/syslog-ng/syslog-ng.conf
-fi                            
+fi
+/sbin/service syslog-ng restart      
 %endif
 
 
