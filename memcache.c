@@ -568,7 +568,7 @@ PHP_RINIT_FUNCTION(memcache)
 	MEMCACHE_G(in_multi) = 0;
 	MEMCACHE_G(proxy_connect_failed) = 0;
 	if (err = check_and_load_config(MEMCACHE_G(log_conf))) {
-		php_printf(" Error in expr parsing for %s",err);
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error in expr parsing %s in file %s. Please fix the error to logging to work", err, MEMCACHE_G(log_conf));
 	}
 	return SUCCESS;
 }
