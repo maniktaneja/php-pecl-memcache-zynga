@@ -5537,11 +5537,9 @@ PHP_FUNCTION(memcache_setlogname)
 	    RETURN_FALSE;
    	}
 
-#if 0
 	if (pool->log_name) {
 		pefree(pool->log_name, 1);
 	}
-#endif
 
    	pool->log_name = pestrdup(log_name, 1);
 	LOG_SET_LOGNAME(pLog, pool);
