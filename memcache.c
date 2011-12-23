@@ -1030,6 +1030,10 @@ void mmc_pool_free(mmc_pool_t *pool TSRMLS_DC) /* {{{ */
 		efree(pool->requests);
 	}
 
+	if (pool->log_name) {
+		pefree(pool->log_name, 1);
+	}
+
 	pool->hash->free_state(pool->hash_state);
 	efree(pool);
 }
