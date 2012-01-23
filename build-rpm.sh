@@ -5,7 +5,7 @@ FILES="config9.m4 \
 	config.w32 \
 	CREDITS \
 	example.php \
-	memcache.c \
+	memcache.cpp \
 	memcache_consistent_hash.c \
 	memcache.dsp \
 	memcache.php \
@@ -19,7 +19,11 @@ FILES="config9.m4 \
 	xml2changelog \
 	package.xml \
 	memcache-zynga.spec \
-	minilzo"
+	minilzo \
+    include \
+    loader.cpp \
+    log.cpp \
+    parse.cpp "
 
 
 specfile=memcache-zynga.spec

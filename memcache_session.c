@@ -31,6 +31,7 @@
 #include "SAPI.h"
 #include "ext/standard/url.h"
 #include "php_memcache.h"
+#include "ext/standard/php_smart_str.h"
 
 ps_module ps_mod_memcache = {
 	PS_MOD(memcache)
@@ -186,7 +187,6 @@ PS_READ_FUNC(memcache)
 {
 	mmc_pool_t *pool = PS_GET_MOD_DATA();
 	zval *result;
-	mc_logger_t *pLog = get_logger();
 
 	if (pool) {
 		char key_tmp[MMC_KEY_MAX_SIZE];
@@ -199,7 +199,7 @@ PS_READ_FUNC(memcache)
 		MAKE_STD_ZVAL(result);
 		ZVAL_NULL(result);
 
-		if (mmc_exec_retrieval_cmd(pool, key_tmp, key_tmp_len, &result, NULL, NULL, pLog TSRMLS_CC) <= 0 || Z_TYPE_P(result) != IS_STRING) {
+		if (mmc_exec_retrieval_cmd(pool, key_tmp, key_tmp_len, &result, NULL, NULL TSRMLS_CC) <= 0 || Z_TYPE_P(result) != IS_STRING) {
 			zval_ptr_dtor(&result);
 			return FAILURE;
 		}
@@ -219,7 +219,6 @@ PS_READ_FUNC(memcache)
 PS_WRITE_FUNC(memcache)
 {
 	mmc_pool_t *pool = PS_GET_MOD_DATA();
-	mc_logger_t *pLog = get_logger();
 
 	if (pool) {
 		char key_tmp[MMC_KEY_MAX_SIZE];
@@ -229,7 +228,7 @@ PS_WRITE_FUNC(memcache)
 			return FAILURE;
 		}
 
-		if (mmc_pool_store(pool, "set", sizeof("set")-1, key_tmp, key_tmp_len, 0, INI_INT("session.gc_maxlifetime"), 0, val, vallen, 0, NULL, 0, 0, pLog TSRMLS_CC)) {
+		if (mmc_pool_store(pool, "set", sizeof("set")-1, key_tmp, key_tmp_len, 0, INI_INT("session.gc_maxlifetime"), 0, val, vallen, 0, NULL, 0, 0 TSRMLS_CC)) {
 			return SUCCESS;
 		}
 	}
@@ -244,7 +243,6 @@ PS_DESTROY_FUNC(memcache)
 {
 	mmc_pool_t *pool = PS_GET_MOD_DATA();
 	mmc_t *mmc;
-	mc_logger_t *pLog = get_logger();
 	
 	int result = -1;
 
@@ -257,7 +255,7 @@ PS_DESTROY_FUNC(memcache)
 		}
 
 		while (result < 0 && (mmc = mmc_pool_find(pool, key_tmp, key_tmp_len TSRMLS_CC)) != NULL) {
-			if ((result = mmc_delete(mmc, key_tmp, key_tmp_len, 0, pLog TSRMLS_CC)) < 0) {
+			if ((result = mmc_delete(mmc, key_tmp, key_tmp_len, 0 TSRMLS_CC)) < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);
 			}
 		}
@@ -278,6 +276,10 @@ PS_GC_FUNC(memcache)
 	return SUCCESS;
 }
 /* }}} */
+
+void append_php_smart_string(smart_str *s, const char *src, int len) {
+    smart_str_appendl(s, src, len);
+}
 
 /*
  * Local variables:

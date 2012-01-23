@@ -9,7 +9,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.10
+Version:      2.4.1.11
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -30,7 +30,7 @@ Requires:     php(zend-abi) = %{php_zend_api}
 %else
 #Requires:     php-api = %{php_apiver}
 %endif
-Requires:     php >= %{php_version}, php-pecl-lib-zparse
+Requires:     php >= %{php_version}
 Conflicts:    php-pecl(memcache)
 
 %description
@@ -179,6 +179,9 @@ fi
 
 
 %changelog
+* Fri Jan 20 2012 <nigupta@zynga.com> 2.4.1.11
+- Refactoring logging changes and few minor bug fixes.Removed the dependency on libzparse.
+
 * Fri Dec 20 2011 <nigupta@zynga.com> 2.4.1.10
 - Logging changes for pecl-memcache. Now pecl-memcache has dependency on libzparse.
 

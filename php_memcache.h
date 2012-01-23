@@ -37,7 +37,6 @@ extern zend_module_entry memcache_module_entry;
 
 #include "ext/standard/php_smart_str_public.h"
 #include "minilzo.h"
-#include "logger.h"
 
 PHP_MINIT_FUNCTION(memcache);
 PHP_MSHUTDOWN_FUNCTION(memcache);
@@ -92,7 +91,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.10"
+#define PHP_MEMCACHE_VERSION "2.4.1.11"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED 1
@@ -148,8 +147,6 @@ typedef struct mmc {
 	zend_bool				in_free;
 	struct mmc				*proxy;
 	struct mmc				*next;
-    struct timeval 			request_time;   
-    struct timeval 			response_time;   
 } mmc_t;
 
 /* hashing strategy */
@@ -158,6 +155,7 @@ typedef void * (*mmc_hash_create_state)(mmc_hash_function);
 typedef void (*mmc_hash_free_state)(void *);
 typedef mmc_t * (*mmc_hash_find_server)(void *, const char *, int, zend_bool TSRMLS_DC);
 typedef void (*mmc_hash_add_server)(void *, mmc_t *, unsigned int);
+void append_php_smart_string(smart_str *s, const char *src, int len);
 
 #define mmc_pool_find(pool, key, key_len) \
 	pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled)
@@ -242,24 +240,16 @@ int mmc_prepare_key_ex(const char *, unsigned int, char *, unsigned int * TSRMLS
 mmc_pool_t *mmc_pool_new(TSRMLS_D);
 void mmc_pool_free(mmc_pool_t * TSRMLS_DC);
 void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
-int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int ,zval *val, mc_logger_t *pLog TSRMLS_DC);
+int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int ,zval *val TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
-int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval *, mc_logger_t * TSRMLS_DC);
-int mmc_delete(mmc_t *, const char *, int, int, mc_logger_t * TSRMLS_DC);
+int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
+int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC); 
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
-
-#define LOG_RESCODE_SET(mmc, code) if (mmc->log) mmc->log->res_code = code; 
-#define LOG_RECV_TIME(mmc) gettimeofday(&(mmc->request_time), 0);	
-#define LOG_SEND_TIME(mmc) gettimeofday(&(mmc->response_time), 0);	
-
-#define diff_time(mmc)                           								   \
-     (mmc->request_time.tv_sec - mmc->response_time.tv_sec) * 1000 * 1000 +        \
-     (mmc->request_time.tv_usec - mmc->response_time.tv_usec)                      \
-
+#define PROXY_STR "proxy"
 
 /* session handler struct */
 #if HAVE_MEMCACHE_SESSION
@@ -299,6 +289,7 @@ void mmc_debug(const char *format, ...);
 #ifndef ZSTR
 #define ZSTR
 #endif
+
 
 #endif	/* PHP_MEMCACHE_H */
 
