@@ -155,6 +155,7 @@ typedef void * (*mmc_hash_create_state)(mmc_hash_function);
 typedef void (*mmc_hash_free_state)(void *);
 typedef mmc_t * (*mmc_hash_find_server)(void *, const char *, int, zend_bool TSRMLS_DC);
 typedef void (*mmc_hash_add_server)(void *, mmc_t *, unsigned int);
+/*wrapper over zend macro smart_str_appendl. defined in memcache_session.c*/
 void append_php_smart_string(smart_str *s, const char *src, int len);
 
 #define mmc_pool_find(pool, key, key_len) \

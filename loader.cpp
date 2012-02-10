@@ -3,9 +3,8 @@
 #include"parser.h"
 #include <sys/stat.h>
 #include <unistd.h>
-using namespace std;
 
-string errorString;
+std::string errorString;
 static mc_logger_t record; 
 
 bool LogManager::statConfigNotChanged(char *file) {
@@ -33,8 +32,8 @@ const char *LogManager::checkAndLoadConfig(char *p) {
         LOG("config file is NULL");
         return NULL;
     }
-    ifstream configFile(p);
-    string str;
+    std::ifstream configFile(p);
+    std::string str;
     errorString = "";
     char mcMaxName[100];
     if (configFile.is_open()) {
@@ -76,14 +75,14 @@ const char *LogManager::checkAndLoadConfig(char *p) {
                         }
                         else {
                             free (p);
-                            string nf("Not able to open the file : ");
+                            std::string nf("Not able to open the file : ");
                             errorString += nf;  
                             errorString += str;  
                             errorString += "\n";  
                             LOG("unable to open the log file %s", str.c_str());
                         }   
                     } else {
-                        string nf("Not a valid log output \n");
+                        std::string nf("Not a valid log output \n");
                         errorString += nf;  
                     }                
                 }
@@ -104,7 +103,7 @@ void LogManager::logPublishRecord(mc_logger_t *d) {
         LOG("Rule evaluated to true");   
         if ((p = exPar->getLogOutPut())) {
             LOG("Writing to output");  
-            p->write("%s %s %s %s %d %d %d %d %d %d %d", d->log_name, d->host, d->command, d->key, d->res_len, d->res_code, d->flags, d->expiry, d->cas, d->res_time, d->serial_time);
+            p->write("%s %s %s %s %d %d %d %d %llu %d %d", d->log_name, d->host, d->command, d->key, d->res_len, d->res_code, d->flags, d->expiry, d->cas, d->res_time, d->serial_time);
         }
     }
 }

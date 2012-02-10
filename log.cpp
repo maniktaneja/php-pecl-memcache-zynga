@@ -10,7 +10,6 @@
 #include <stdarg.h>
 #include <iostream>
 #include "parser.h"
-using namespace std;
 
 #ifndef O_LARGEFILE
 # define O_LARGEFILE 0
@@ -55,13 +54,18 @@ int fileOut::write(const char *fmt, ...) {
     static char logbuf[MAX_LOGBUF_LEN];            /* scratch buffer */
     int logbuf_used = 0;                    /* length of scratch buffer */
     time_t t;
+    int out;
 
     time(&t);
     logbuf_used += strftime(logbuf+logbuf_used, MAX_LOGBUF_LEN - 2, 
             "[%Y-%m-%d %H:%M:%S] ", localtime(&t));
     va_start(ap, fmt);
-    logbuf_used +=
-        vsnprintf((logbuf + logbuf_used), (MAX_LOGBUF_LEN - logbuf_used - 2), fmt, ap);
+    if ((out = vsnprintf((logbuf + logbuf_used), (MAX_LOGBUF_LEN - logbuf_used - 2),
+         fmt, ap)) < 0) {
+        LOG("vsnprintf failed to write in buffer");
+        return -1;
+    }
+    logbuf_used += out;
     va_end(ap);
     logbuf[logbuf_used] = '\n';
     logbuf[logbuf_used+1] = '\0';
@@ -81,10 +85,15 @@ void syslogOut::close() {
 int syslogOut::write(const char *fmt, ...) {
     va_list ap;
     static char logbuf[MAX_LOGBUF_LEN];            /* scratch buffer */
-    int logbuf_used = 0;                    /* length of scratch buffer */
+    int logbuf_used = 0, out = 0;                    /* length of scratch buffer */
+
     va_start(ap, fmt);
-    logbuf_used +=
-        vsnprintf((logbuf + logbuf_used), (MAX_LOGBUF_LEN - logbuf_used - 2), fmt, ap);
+    if ((out = vsnprintf((logbuf + logbuf_used), (MAX_LOGBUF_LEN - logbuf_used - 2),
+         fmt, ap)) < 0) {
+        LOG("vsnprintf failed to write in buffer");
+        return -1;
+    }
+    logbuf_used += out;
     va_end(ap);
 
     logbuf[logbuf_used] = '\n';

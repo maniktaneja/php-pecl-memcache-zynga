@@ -101,16 +101,15 @@ if test "$PHP_MEMCACHE" != "no"; then
   AC_CHECK_SIZEOF(ptrdiff_t)
   AC_C_CONST
 
-  dnl  PHP_ADD_INCLUDE($PHP_PARSELIB_INCPATH)
+  PHP_REQUIRE_CXX()
+  PHP_ADD_LIBRARY(stdc++, 1, MEMCACHE_SHARED_LIBADD)
+  PHP_SUBST(MEMCACHE_SHARED_LIBADD)
 
   AC_MSG_CHECKING([for memcache session support])
   if test "$PHP_MEMCACHE_SESSION" != "no"; then
     AC_MSG_RESULT([enabled])
     AC_DEFINE(HAVE_MEMCACHE_SESSION,1,[Whether memcache session handler is enabled])
     AC_DEFINE(HAVE_MEMCACHE,1,[Whether you want memcache support])
-    PHP_REQUIRE_CXX()
-    PHP_ADD_LIBRARY(stdc++, 1, MEMCACHE_SHARED_LIBADD)
-    PHP_SUBST(MEMCACHE_SHARED_LIBADD)
     PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.c memcache_session.c minilzo/minilzo.c loader.cpp log.cpp parse.cpp, $ext_shared,,-I$session_inc_path -I$abs_srcdir/minilzo -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
     ifdef([PHP_ADD_EXTENSION_DEP]$abs_srcdir/include ,
     [
@@ -119,9 +118,6 @@ if test "$PHP_MEMCACHE" != "no"; then
   else 
     AC_MSG_RESULT([disabled])
     AC_DEFINE(HAVE_MEMCACHE,1,[Whether you want memcache support])
-    PHP_REQUIRE_CXX()
-    PHP_ADD_LIBRARY(stdc++, 1, MEMCACHE_SHARED_LIBADD)
-    PHP_SUBST(MEMCACHE_SHARED_LIBADD)
     PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.c, $ext_shared)
     PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.cc minilzo/minilzo.c loader.cpp log.cpp parse.cpp, $ext_shared,,-I$abs_srcdir/minilzo -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
   fi

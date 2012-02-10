@@ -74,6 +74,7 @@ typedef struct mc_logger : public Timer {
     }
 
     void stopSerialTime() {
+        timeStruct endTime;
         recordTime(&endTime);
         serial_time = diffTime(startTime, endTime); 
     }
@@ -83,8 +84,8 @@ typedef struct mc_logger : public Timer {
     }
 
     char *log_name;
-    int cas;
-    timeStruct startTime, endTime;
+    unsigned long long cas;
+    timeStruct startTime;
 
 } mc_logger_t;
 #undef __TN__
@@ -152,7 +153,7 @@ private:
 #define SVR_NT_FOUND              104  
 #define READLINE_FAILED           105  
 #define SVR_OPN_FAILED            106  
-#define COMPRSS_FAILED            107  
+#define COMPRESS_FAILED           107  
 #define PARSE_ERROR               108  
 #define PREPARE_KEY_FAILED        109  
 #define INVALID_CB                110  

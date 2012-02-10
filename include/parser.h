@@ -8,7 +8,6 @@
 #include<iterator>
 #include<stack>
 #include<map>
-using namespace std;
 
 #define ERRORLOG_STDERR        1
 #define ERRORLOG_FILE          2
@@ -27,7 +26,7 @@ class token {
 public:
     tokenType ty;
     oprType op;
-    string str;
+    std::string str;
     off_t offset;
     field_type opndType;
 };
@@ -39,7 +38,7 @@ class data : public mc_logger_t
 class opr {
 public:
     virtual bool eval(int a, int b) {} 
-    virtual bool eval(char *a, string b) {}; 
+    virtual bool eval(char *a, std::string b) {}; 
     oprType opt;
     bool strType;     
 };
@@ -62,9 +61,12 @@ public:
         opt = CTN;
         strType = true ;    
     }
-    bool eval(char *a, string b) {
-        string ab(a);
-        return (ab.find(b) != string::npos);
+    bool eval(char *a, std::string b) {
+        if (!a) {
+            return false;
+        }
+        std::string ab(a);
+        return (ab.find(b) != std::string::npos);
     }
 };
 
@@ -140,7 +142,7 @@ public:
         opt = SEQ;
         strType = true;    
     }
-    bool eval(char *a, string b) {
+    bool eval(char *a, std::string b) {
         if (!a) {
             return false;
         }
@@ -154,7 +156,7 @@ public:
         opt = PM;
         strType = true;    
     }
-    bool eval(char *a, string b) {
+    bool eval(char *a, std::string b) {
         if (!a) {
             return false;
         }
@@ -179,12 +181,12 @@ public:
     genNode *left;
     genNode *right;
     opr * op;    
-    string str;
+    std::string str;
 };
 
 class leaf : public genNode {
 public:
-    leaf(string &p, tokenType &tp) {
+    leaf(std::string &p, tokenType &tp) {
         str.assign(p);
         val = atoi(p.c_str());    
         leafType = tp;
@@ -199,7 +201,7 @@ public:
     int getInt() {
         return val;
     }  
-    string & getString() {
+    std::string & getString() {
         return str;
     }
     off_t getOffset() {
@@ -254,11 +256,11 @@ public:
 
 class exprParser {
 public:
-    exprParser(string &st) : str(st), root(NULL), out(NULL){
-        istringstream iss(st.c_str());
-        copy(istream_iterator<string>(iss),
-            istream_iterator<string>(),
-            back_inserter<vector<string> >(strs));
+    exprParser(std::string &st) : str(st), root(NULL), out(NULL){
+        std::istringstream iss(st.c_str());
+        copy(std::istream_iterator<std::string>(iss),
+            std::istream_iterator<std::string>(),
+            std::back_inserter<std::vector<std::string> >(strs));
         itr = strs.begin();
     }
     bool buildTree();
@@ -287,9 +289,9 @@ public:
     }
 private:
     genNode *root;
-    string str;
-    vector<string> strs;
-    vector<string>::iterator itr;
+    std::string str;
+    std::vector<std::string> strs;
+    std::vector<std::string>::iterator itr;
     logOutPut *out; 
 };
 
@@ -302,8 +304,8 @@ public:
         }
         return ins;
     }
-    bool insertExprTree(string mc, exprParser *p) {
-        std::map<string, exprParser *> :: iterator it; 
+    bool insertExprTree(std::string mc, exprParser *p) {
+        std::map<std::string, exprParser *> :: iterator it; 
         if ((it = exprMap.find(mc)) != exprMap.end()) {
             LOG("duplicate mc value %s, so returning", mc.c_str());
             return false;
@@ -311,15 +313,15 @@ public:
         exprMap[mc] = p;
         return true;
     }
-    exprParser *getExprTree(string mc) {
-        std::map<string, exprParser *> :: iterator it; 
+    exprParser *getExprTree(std::string mc) {
+        std::map<std::string, exprParser *> :: iterator it; 
         if ((it = exprMap.find(mc)) == exprMap.end()) {
             return NULL;
         }
         return it->second;
     }
     void flushConfig() {
-        std::map<string, exprParser *> :: iterator itr;
+        std::map<std::string, exprParser *> :: iterator itr;
         itr = exprMap.begin(); 
         while (itr != exprMap.end()) {
             delete itr->second;
@@ -329,7 +331,7 @@ public:
 private:
     logger() {
     }
-    std::map<string, exprParser *> exprMap;
+    std::map<std::string, exprParser *> exprMap;
 };
 
 class fileOut : public logOutPut {

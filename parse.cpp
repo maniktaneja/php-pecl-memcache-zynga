@@ -4,9 +4,8 @@
 #include <string>
 #include <iterator>
 #include <stack>
-#include<assert.h>
+#include <assert.h>
 #include "parser.h"
-using namespace std;
 
 opr *oprFactory(oprType op) {
     switch (op) {
@@ -104,7 +103,7 @@ token exprParser :: getNextToken() {
 
 
 void exprParser :: printStrs() {
-    vector<string>::iterator i = itr;
+    std::vector<std::string>::iterator i = itr;
     while (i != strs.end()) {
         LOG("%s", (*i).c_str());
         i++;
@@ -138,8 +137,8 @@ bool exprParser::checkInvalidOpr(genNode *oprNode, genNode *leftNode, genNode *r
 }
 
 bool exprParser :: buildTree() {
-    stack<genNode *> oprStk;
-    stack<genNode *> opndStk;
+    std::stack<genNode *> oprStk;
+    std::stack<genNode *> opndStk;
     bool success = true;
 
     printStrs();

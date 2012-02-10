@@ -35,8 +35,7 @@
 #include <unistd.h>
 #include <zlib.h>
 #include <time.h>
-#include <iostream.h>
-using namespace std;
+#include <iostream>
 
 extern "C" {
 #include "php.h"
@@ -50,6 +49,7 @@ extern "C" {
 #include "php_memcache.h"
 #include "memcache_queue.h"
 }
+
 #include "logger.h"
 
 #ifndef ZEND_ENGINE_2
@@ -1145,7 +1145,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		}
 
 		if (!mmc_compress(&data, &data_len, value, value_len, flags TSRMLS_CC)) {
-			LogManager::getLogger()->setCode(COMPRSS_FAILED);
+			LogManager::getLogger()->setCode(COMPRESS_FAILED);
 			/* mmc_server_seterror(mmc, "Failed to compress data", 0); */
 			return -1;
 		}
@@ -2204,7 +2204,6 @@ static int mmc_exec_retrieval_cmd_multi(
 					(mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL &&
 					mmc->status != MMC_STATUS_FAILED) {
 					if (!(mmc->outbuf.len)) {
-						char * a;
 						append_php_smart_string(&(mmc->outbuf), pcas != NULL? "gets": "get",
 						                  pcas != NULL? sizeof("gets")-1: sizeof("get")-1);
 						pool->requests[num_requests++] = mmc;
