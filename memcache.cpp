@@ -4614,7 +4614,7 @@ static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTE
 
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas) /* {{{ */
 {
-	char *key = (char *)emalloc(MMC_KEY_MAX_SIZE);
+	static char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
 
 	if (Z_TYPE_P(zkey) != IS_ARRAY) {
