@@ -2848,7 +2848,6 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 	char *command;
 	int  command_len, response_len;
 
-	LogManager::getLogger()->setKey(key);
 	LogManager::getLogger()->setHost(mmc->host);
 
 	if (cmd > 0) {
@@ -2901,7 +2900,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 {
 	mmc_pool_t *pool;
 	int result;
-	char key_tmp[MMC_KEY_MAX_SIZE];
+	static char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
 	char shard_key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int shard_key_tmp_len;
@@ -2922,11 +2921,13 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 			return 0;
 		}
 	}
-
+	
 	if (mmc_prepare_key_ex(key, key_len, key_tmp, &key_tmp_len TSRMLS_CC) != MMC_OK) {
 		LogManager::getLogger()->setCode(PREPARE_KEY_FAILED);
 		return 0;
 	}
+	
+	LogManager::getLogger()->setKey(key_tmp);
 
 	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
 		LogManager::getLogger()->setCode(POOL_NT_FOUND);
@@ -3613,7 +3614,6 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * comman
 		}
 	}
 
-	LogManager::getLogger()->setKey(key);
 	LogManager::getLogger()->setFlags(flag);
 	LogManager::getLogger()->setExpiry(expire);
 
@@ -4078,6 +4078,8 @@ PHP_FUNCTION(memcache_getByKey)
 		RETURN_FALSE;
 	}
 
+	LogManager::getLogger()->setLogName(pool->log_name);	
+	
 	zval *tmp;
 	MAKE_STD_ZVAL(tmp);
 	ZVAL_NULL(tmp);
@@ -4115,7 +4117,7 @@ PHP_FUNCTION(memcache_getByKey)
 static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags, 
 	zval *return_cas TSRMLS_DC) {
 
-	char key[MMC_KEY_MAX_SIZE];
+	static char key[MMC_KEY_MAX_SIZE];
 	char shardKey[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
 	unsigned int shardKey_len;
@@ -4141,6 +4143,8 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 	if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK && mmc_prepare_key(zshardKey, shardKey, &shardKey_len TSRMLS_CC) == MMC_OK) {
 		MMC_DEBUG(("php_mmc_get_by_key: getting key '%s' using shardKey '%s'", key, shardKey));
 
+		LogManager::getLogger()->setKey(key);
+
 		command_len = (pcas != NULL) ? spprintf(&command, 0, "gets %s", key) :
 			spprintf(&command, 0, "get %s", key);
 		ZVAL_NULL(zvalue);
@@ -4155,6 +4159,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 				if (result != 0) {
 					if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || !mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
 						mmc_server_seterror(mmc, "Malformed END line", 0);
+						LogManager::getLogger()->setCode(MC_MALFORMD);	
 						result = -1;
 					} else if (flags & MMC_SERIALIZED) {
 						result = mmc_postprocess_value(key, mmc->host, &zvalue, value, value_len TSRMLS_CC);
@@ -4170,10 +4175,11 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 				//clear out the buffer from a failure to uncompress in mmc_read_value
 				if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
 						!mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
-
+					LogManager::getLogger()->setCode(MC_MALFORMD);	
 					mmc_server_seterror(mmc, "Malformed END line", 0);
 					result = -1;
 				} else {
+					LogManager::getLogger()->setCode(MC_ONLY_END);	
 					break;
 				}
 
@@ -4181,6 +4187,17 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 				mmc_server_failure(mmc TSRMLS_CC);
 			}
 		}
+
+		if (!mmc) {
+			LogManager::getLogger()->setHost(PROXY_STR);
+			LogManager::getLogger()->setCode(CONNECT_FAILED);
+		} else {
+			if (mmc->status == MMC_STATUS_FAILED) {
+				LogManager::getLogger()->setCode(CONNECT_FAILED);
+			}
+			LogManager::getLogger()->setHost(mmc->host);
+		}
+
 		if (return_flags != NULL) {
 			zval_dtor(return_flags);
 			ZVAL_LONG(return_flags, flags);
@@ -4194,6 +4211,7 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 
 		return result;
 	} else {
+		LogManager::getLogger()->setCode(PREPARE_KEY_FAILED);
 		MMC_DEBUG(("php_mmc_get_by_key: Unknown problem with the key or shardKey"));
 		return -1;
 	}
@@ -5262,9 +5280,10 @@ PHP_FUNCTION(memcache_decrement) {
 		LogManager::getLogger()->setCode(PREPARE_KEY_FAILED);	
 		RETURN_FALSE;
 	}
+	
+	LogManager::getLogger()->setKey(key_tmp);
 
 	php_mmc_incr_decr(pool, key_tmp, key_tmp_len, NULL, 0, value, 0, 0, &return_value);
-
 	
 	return;
 }

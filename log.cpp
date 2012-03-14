@@ -93,7 +93,7 @@ int syslogOut::write(const char *fmt, ...) {
         LOG("vsnprintf failed to write in buffer");
         return -1;
     }
-    logbuf_used += out;
+    logbuf_used += std::min(out, MAX_LOGBUF_LEN - logbuf_used - 2);
     va_end(ap);
 
     logbuf[logbuf_used] = '\n';

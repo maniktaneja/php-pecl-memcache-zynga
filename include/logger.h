@@ -65,7 +65,7 @@ typedef struct mc_logger : public Timer {
         log_name = ln;
     } 
 
-    void setCas(unsigned int c) {
+    void setCas(unsigned long c) {
         cas = c;
     }
 
