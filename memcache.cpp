@@ -3587,7 +3587,7 @@ PHP_FUNCTION(memcache_get_version)
 }
 /* }}} */
 
-static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC) {
+static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command, int command_len, zend_bool by_key TSRMLS_DC) {
 	zval *value;
 	zval *mmc_object = getThis();
 	int key_len;
@@ -3599,8 +3599,21 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * comman
 	long cas = 0;
 	zval *val_len = 0;
 	LogManager lm(logData);
+	static char *bykey_cmd = NULL;
+	static int bykey_cmd_len = 0;
 
-	LogManager::getLogger()->setCmd(command);
+	if(by_key) {
+		if(bykey_cmd_len < command_len + sizeof("ByKey")) {
+			bykey_cmd_len =  command_len + sizeof("ByKey");
+			bykey_cmd = (char *)erealloc(bykey_cmd, bykey_cmd_len);
+		}		
+
+		strncpy(bykey_cmd, command, command_len);
+		strncpy(bykey_cmd + command_len, "ByKey", sizeof("ByKey"));
+		LogManager::getLogger()->setCmd(bykey_cmd);
+	} else {
+		LogManager::getLogger()->setCmd(command);
+	}
 
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lllsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
