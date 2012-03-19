@@ -5254,6 +5254,8 @@ PHP_FUNCTION(memcache_incrementByKey) {
 
 	php_mmc_incr_decr(pool, key_tmp, key_tmp_len, shard_key_tmp, shard_key_tmp_len, value, 1, 1, &return_value);
 
+	LogManager::getLogger()->setKey(key_tmp);
+
 	return;
 }
 
@@ -5355,6 +5357,8 @@ PHP_FUNCTION(memcache_decrementByKey) {
 	}
 
 	php_mmc_incr_decr(pool, key_tmp, key_tmp_len, shard_key_tmp, shard_key_tmp_len, value, 1, 0, &return_value);
+
+	LogManager::getLogger()->setKey(key_tmp);
 
 	return;
 }
