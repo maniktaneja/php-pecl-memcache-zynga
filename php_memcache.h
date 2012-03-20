@@ -91,7 +91,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.11"
+#define PHP_MEMCACHE_VERSION "2.4.1.12"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED 1
@@ -157,6 +157,7 @@ typedef mmc_t * (*mmc_hash_find_server)(void *, const char *, int, zend_bool TSR
 typedef void (*mmc_hash_add_server)(void *, mmc_t *, unsigned int);
 /*wrapper over zend macro smart_str_appendl. defined in memcache_session.c*/
 void append_php_smart_string(smart_str *s, const char *src, int len);
+
 
 #define mmc_pool_find(pool, key, key_len) \
 	pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled)
@@ -241,7 +242,7 @@ int mmc_prepare_key_ex(const char *, unsigned int, char *, unsigned int * TSRMLS
 mmc_pool_t *mmc_pool_new(TSRMLS_D);
 void mmc_pool_free(mmc_pool_t * TSRMLS_DC);
 void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
-int mmc_pool_store(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long , const char *, int, zend_bool, const char *, int ,zval *val TSRMLS_DC);
+int mmc_pool_store_wrapper(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long, const char *, int, zend_bool, const char *, int ,zval *TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC); 
@@ -255,8 +256,8 @@ void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 /* session handler struct */
 #if HAVE_MEMCACHE_SESSION
 #include "ext/session/php_session.h"
-
 extern ps_module ps_mod_memcache;
+
 #define ps_memcache_ptr &ps_mod_memcache
 
 PS_FUNCS(memcache);

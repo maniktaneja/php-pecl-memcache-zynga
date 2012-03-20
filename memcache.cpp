@@ -460,7 +460,7 @@ static void _mmc_pool_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 static void _mmc_pserver_list_dtor(zend_rsrc_list_entry * TSRMLS_DC);
 
 static void mmc_server_free(mmc_t * TSRMLS_DC);
-static int mmc_server_store(mmc_t *, const char *, int, mc_logger_t * TSRMLS_DC);
+static int mmc_server_store(mmc_t *, const char *, int, unsigned long & TSRMLS_DC);
 
 static int mmc_compress(char **, unsigned long *, const char *, int, int TSRMLS_DC);
 static int mmc_uncompress(char **, unsigned long *, const char *, int, int);
@@ -475,7 +475,6 @@ static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsign
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
 static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC);
 static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len TSRMLS_DC);
-static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, long cas, char *shard_key, int shard_key_len, char *, int, zend_bool,zval *val_len);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
 static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS);
@@ -488,6 +487,7 @@ static void mmc_free_multi(TSRMLS_D);
 static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags, zval *return_cas TSRMLS_DC);
 static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **return_value TSRMLS_DC);
 static void php_mmc_store_multi_by_key(zval * mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value, zval **val_len TSRMLS_DC);
+static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, unsigned long &cas, char *shard_key, int shard_key_len, char *command, int command_len, zend_bool by_key, zval *val_len);
 static int php_mmc_delete_by_key(mmc_pool_t *pool, char *key, int key_len, char *shard_key, int shard_key_len, int time TSRMLS_DC);
 static void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int time, zval **return_value TSRMLS_DC);
 static int mmc_str(char *haystack, char *needle, int haystack_len, int needle_len);
@@ -811,7 +811,7 @@ int mmc_server_failure(mmc_t *mmc TSRMLS_DC) /*determines if a request should be
 }
 /* }}} */
 
-static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSRMLS_DC) /* {{{ */
+static int mmc_server_store(mmc_t *mmc, const char *request, int request_len, unsigned long &cas TSRMLS_DC) /* {{{ */
 {
 	int response_len;
 	php_stream *stream;
@@ -847,6 +847,7 @@ static int mmc_server_store(mmc_t *mmc, const char *request, int request_len TSR
 	
 	if(mmc_str_left(mmc->inbuf, "STORED", response_len, sizeof("STORED") - 1)) {
 		LogManager::getLogger()->setCode(MC_STORED);
+		cas = strtoul(mmc->inbuf+sizeof("STORED"), NULL, 10);
 		return 1;
 	}
 
@@ -1040,6 +1041,7 @@ void mmc_pool_free(mmc_pool_t *pool TSRMLS_DC) /* {{{ */
 
 	if (pool->log_name) {
 		pefree(pool->log_name, 1);
+		pool->log_name = NULL;
 	}
 
 	pool->hash->free_state(pool->hash_state);
@@ -1095,7 +1097,7 @@ static int mmc_pool_close(mmc_pool_t *pool TSRMLS_DC) /* disconnects and removes
 }
 /* }}} */
 
-int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long cas, const char *value, int value_len, zend_bool by_key, const char *shard_key, int shard_key_len, zval *val_len  TSRMLS_DC) /* {{{ */
+int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long &cas, const char *value, int value_len, zend_bool by_key, const char *shard_key, int shard_key_len, zval *val_len  TSRMLS_DC) /* {{{ */
 {
 	mmc_t *mmc;
 	char *request;
@@ -1217,7 +1219,7 @@ retry_store:
 
 
 	if (caslen) {
-		request_len = sprintf(request, "cas %s %d %d %d %lu\r\n", key, flags, expire, value_len, cas);
+		request_len = sprintf(request, "cas %s %d %d %d %lu returncas\r\n", key, flags, expire, value_len, cas);
 		LogManager::getLogger()->setCas(cas);
 	} else {
 		request_len = sprintf(request, "%s %s %d %d %d\r\n", command, key, flags, expire, value_len);
@@ -1256,7 +1258,7 @@ retry_store:
 
 		MMC_DEBUG(("mmc_pool_store: Sending request '%s'", request));
 	
-		if ((result = mmc_server_store(mmc, request, request_len TSRMLS_CC)) < 0) {
+		if ((result = mmc_server_store(mmc, request, request_len, cas TSRMLS_CC)) < 0) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		} 
 	}
@@ -1291,6 +1293,13 @@ retry_store:
 	return result;
 }
 /* }}} */
+
+
+int mmc_pool_store_wrapper(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long cas, const char *value, int value_len, zend_bool by_key, const char *shard_key, int shard_key_len, zval *val_len  TSRMLS_DC) /* {{{ */
+{
+	return mmc_pool_store(pool, command, command_len, key, key_len, flags, expire, cas, value, value_len, by_key, shard_key, shard_key_len, val_len); 
+}
+/*}}}*/
 
 static int mmc_compress(char **result, unsigned long *result_len, const char *data, int data_len, int flags TSRMLS_DC) /* {{{ */
 {
@@ -2896,7 +2905,7 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 }
 /* }}} */
 
-static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, long cas, char *shard_key, int shard_key_len, char *command, int command_len, zend_bool by_key, zval *val_len) /* {{{ */
+static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, unsigned long &cas, char *shard_key, int shard_key_len, char *command, int command_len, zend_bool by_key, zval *val_len) /* {{{ */
 {
 	mmc_pool_t *pool;
 	int result;
@@ -3596,8 +3605,8 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	char *shard_key;
 	long flag = 0;
 	long expire = 0;
-	long cas = 0;
-	zval *val_len = 0;
+	unsigned long cas = 0;
+	zval *val_len = 0, *zval_cas = 0;
 	LogManager lm(logData);
 	static char *bykey_cmd = NULL;
 	static int bykey_cmd_len = 0;
@@ -3607,7 +3616,6 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 			bykey_cmd_len =  command_len + sizeof("ByKey");
 			bykey_cmd = (char *)erealloc(bykey_cmd, bykey_cmd_len);
 		}		
-
 		strncpy(bykey_cmd, command, command_len);
 		strncpy(bykey_cmd + command_len, "ByKey", sizeof("ByKey"));
 		LogManager::getLogger()->setCmd(bykey_cmd);
@@ -3616,12 +3624,12 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	}
 
 	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lllsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lllsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &zval_cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);	
 			return;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|lllsz", &key, &key_len, &value, &flag, &expire, &cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sz|llzsz", &key, &key_len, &value, &flag, &expire, &zval_cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);	
 			return;
 		}
@@ -3633,8 +3641,15 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	if (val_len) {
 		convert_to_long(val_len);
 	}
-
+	
+	if (zval_cas) {
+		cas = Z_LVAL_P(zval_cas);
+	}
+	
 	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, command, command_len, by_key, val_len)) {
+		if (zval_cas) {
+			ZVAL_LONG(zval_cas, cas);	
+		}
 		RETURN_TRUE;
 	} else {
 		RETURN_FALSE;
@@ -3981,7 +3996,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 				unsigned int shard_key_len;
 				int flag = 0;
 				int expire = 0;
-				long cas = 0;
+				unsigned long cas = 0;
 				zval **zvalue;
 				zval **zshardKey;
 				zval **zflag;
