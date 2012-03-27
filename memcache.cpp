@@ -34,6 +34,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <zlib.h>
+
+#ifdef HAVE_BZ2
+#include <bzlib.h>
+#endif
+
 #include <time.h>
 #include <iostream>
 
@@ -45,6 +50,11 @@ extern "C" {
 #include "ext/standard/php_string.h"
 #include "ext/standard/php_var.h"
 #include "ext/standard/php_smart_str.h"
+
+#ifdef HAVE_MEMCACHE_IGBINARY
+	#include "ext/igbinary/igbinary.h"
+#endif
+
 #include "php_network.h"
 #include "php_memcache.h"
 #include "memcache_queue.h"
@@ -401,6 +411,7 @@ static PHP_INI_MH(OnUpdateCompressionLevel) /* {{{ */
 	MEMCACHE_G(compression_level) = lval;
 	return SUCCESS;
 }
+/* }}} */
 
 static PHP_INI_MH(OnUpdateRetryInterval) /* {{{ */
 {
@@ -538,6 +549,12 @@ PHP_MINIT_FUNCTION(memcache)
 
 	REGISTER_LONG_CONSTANT("MEMCACHE_COMPRESSED", MMC_COMPRESSED, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("MEMCACHE_COMPRESSED_LZO", MMC_COMPRESSED_LZO, CONST_CS | CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("MEMCACHE_COMPRESSED_BZIP2", MMC_COMPRESSED_BZIP2, CONST_CS | CONST_PERSISTENT);
+
+#ifdef HAVE_MEMCACHE_IGBINARY
+	REGISTER_LONG_CONSTANT("MEMCACHE_SERIALIZED_IGBINARY", MMC_SERIALIZED_IGBINARY, CONST_CS | CONST_PERSISTENT);
+#endif
+
 	REGISTER_INI_ENTRIES();
 
 #if HAVE_MEMCACHE_SESSION
@@ -594,6 +611,12 @@ PHP_MINFO_FUNCTION(memcache)
 	php_info_print_table_header(2, "memcache support", "enabled");
 	php_info_print_table_row(2, "Active persistent connections", buf);
 	php_info_print_table_row(2, "LZO compression", memcache_lzo_enabled? "enabled": "disabled");
+#ifdef HAVE_BZ2
+	php_info_print_table_row(2, "BZip2 compression", "enabled");
+#endif
+#ifdef HAVE_MEMCACHE_IGBINARY
+	php_info_print_table_row(2, "Igbinary serialization", "enabled");
+#endif
 	php_info_print_table_row(2, "Version", PHP_MEMCACHE_VERSION);
 	php_info_print_table_row(2, "Revision", "$Revision: 23976 $");
 	php_info_print_table_end();
@@ -1124,7 +1147,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 	/* autocompress large values */
 	if (pool->compress_threshold && value_len >= pool->compress_threshold &&
-		!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO))) {
+		!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2))) {
 
 		/* skip compression when the command is either append or prepend */
 		if (strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len)) {
@@ -1138,12 +1161,15 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		uncrc32 = mmc_hash_crc32(value, value_len); // crc of the uncompressed data
 	}
 
-	if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO)) {
+	if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO) || (flags & MMC_COMPRESSED_BZIP2)) {
 		unsigned long data_len;
 
 		if (!memcache_lzo_enabled) {
 			flags &= ~MMC_COMPRESSED_LZO;
-			flags |= MMC_COMPRESSED;
+
+			if(!(flags & MMC_COMPRESSED_BZIP2)) {
+				flags |= MMC_COMPRESSED;
+			}
 		}
 
 		if (!mmc_compress(&data, &data_len, value, value_len, flags TSRMLS_CC)) {
@@ -1158,12 +1184,12 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			value_len = data_len;
 		}
 		else {
-			flags &= ~(MMC_COMPRESSED | MMC_COMPRESSED_LZO);
+			flags &= ~(MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2);
 			efree(data);
 			data = NULL;
 		}
 		//compute crc of the data after compression and only if the data was compressed
-		if (add_crc_hdr && ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO))) {
+		if (add_crc_hdr && ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO) || (flags & MMC_COMPRESSED_BZIP2))) {
 			crc32 = mmc_hash_crc32(value, value_len);
 		}
 	}
@@ -1321,6 +1347,19 @@ static int mmc_compress(char **result, unsigned long *result_len, const char *da
 		} else {
 			status = compress((unsigned char *) *result, result_len, (unsigned const char *) data, data_len);
 		}
+	} else if(flags & MMC_COMPRESSED_BZIP2) {
+		/* optimize later for bzip2 compress estimations */
+		/* *result_len = data_len + (0.01 * data_len) + 600; */
+		int block_size = 4;
+		int work_factor = 0;
+		unsigned int intRetSize = (unsigned int)*result_len;
+
+		status = BZ2_bzBuffToBuffCompress(*result, &intRetSize, (char*)data, data_len, block_size, 0, work_factor);
+		*result_len = intRetSize;
+		switch(status) {
+			case BZ_OK: status = Z_OK; break;
+			default: status = Z_DATA_ERROR; break;
+		}
 	} else {
 		status = lzo1x_1_compress((const unsigned char *)data, data_len, (unsigned char*)*result, (lzo_uint*)result_len, MEMCACHE_G(lzo_wmem));
 		switch (status) {
@@ -1356,6 +1395,66 @@ static int mmc_compress(char **result, unsigned long *result_len, const char *da
 }
 /* }}}*/
 
+static int bz2_decompress_safe(unsigned char** result, size_t *result_len, unsigned const char* data, size_t data_len) /* {{{ */ 
+{
+#ifdef  HAVE_BZ2
+	/* refer to ext/bz2/bz2.c */
+	int error;
+	long small = 0;
+	#if defined(PHP_WIN32)
+	unsigned __int64 size = 0;
+	#else
+	unsigned long long size = 0;
+	#endif
+	bz_stream bzs;
+
+	bzs.bzalloc = NULL;
+	bzs.bzfree = NULL;
+
+	if (BZ2_bzDecompressInit(&bzs, 0, small) != BZ_OK) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "BZ2_bzDecompressInit() failed");
+		return 0;
+	}
+
+	bzs.next_in = (char*)data;
+	bzs.avail_in = data_len;
+
+	/* review: result is exact size as result_len (there is no + 1) */
+	bzs.avail_out = *result_len;
+	bzs.next_out = (char *)*result;
+
+	while ((error = BZ2_bzDecompress(&bzs)) == BZ_OK && bzs.avail_in > 0) {
+		/* compression is better then 2:1, need to allocate more memory */
+		bzs.avail_out = data_len;
+		size = (bzs.total_out_hi32 * (unsigned int) -1) + bzs.total_out_lo32;
+		*result = (unsigned char*)safe_erealloc(*result, 1, bzs.avail_out, size );
+		bzs.next_out = (char*)*result + size;
+	}
+
+	if (error == BZ_STREAM_END || error == BZ_OK) {
+		size = (bzs.total_out_hi32 * (unsigned int) -1) + bzs.total_out_lo32;
+	} else { /* real error */
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "BZ2_bzDecompress() failed");
+	}
+
+	BZ2_bzDecompressEnd(&bzs);
+
+	*result_len = size;
+
+	switch(error) {
+		case BZ_STREAM_END:
+		case BZ_OK:
+			return Z_OK;
+	}
+
+	return Z_DATA_ERROR;
+
+#else
+	/* TODO : php_error_docref */
+#endif
+}
+/* }}} */
+
 static int mmc_uncompress(char **result, unsigned long *result_len, const char *data, int data_len, int flags) /* {{{ */
 {
 	int status;
@@ -1367,6 +1466,8 @@ static int mmc_uncompress(char **result, unsigned long *result_len, const char *
 		*result = (char *) erealloc(tmp1, *result_len);
 		if (flags & MMC_COMPRESSED) {
 			status = uncompress((unsigned char *) *result, result_len, (unsigned const char *) data, data_len);
+		} else if(flags & MMC_COMPRESSED_BZIP2) {
+			status = bz2_decompress_safe((unsigned char**) result, result_len, (unsigned const char *) data, data_len);
 		} else {
 			status = lzo1x_decompress_safe((const unsigned char*)data, data_len, (unsigned char *)*result, (lzo_uint*)result_len, NULL);
 			if (status == LZO_E_OUTPUT_OVERRUN) status = Z_BUF_ERROR;
@@ -1811,32 +1912,54 @@ static int mmc_parse_response(mmc_t *mmc, char *response, int response_len, char
 }
 /* }}} */
 
-static int mmc_postprocess_value(const char* key, const char* host, zval **return_value, char *value, int value_len TSRMLS_DC) /*
+static int mmc_postprocess_value(const char* key, int flags, const char* host, zval **return_value, char *value, int value_len TSRMLS_DC) /*
 	post-process a value into a result zval struct, value will be free()'ed during process {{{ */
 {
 	const char *value_tmp = value;
-	php_unserialize_data_t var_hash;
-	PHP_VAR_UNSERIALIZE_INIT(var_hash);
 
-	LogManager::getLogger()->startSerialTime();
+ 	
+	if(flags & MMC_SERIALIZED) {
+ 		php_unserialize_data_t var_hash;
+ 		PHP_VAR_UNSERIALIZE_INIT(var_hash);
+		LogManager::getLogger()->startSerialTime();
+ 		if (!php_var_unserialize(return_value, (const unsigned char **)&value_tmp, (const unsigned char *)(value_tmp + value_len), &var_hash TSRMLS_CC)) {
+ 			if (!MEMCACHE_G(debug_mode)) {
+ 				ZVAL_FALSE(*return_value);
+ 				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 				efree(value);
+ 				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s, server=%s", key, host);
+ 				return 0;
+ 			} else {
+ 				ZVAL_STRINGL(*return_value, value, value_len, 1);
+ 				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s, server=%s, raw value returned as zval string", key, host);
+ 			}
+ 		}
+		LogManager::getLogger()->stopSerialTime();
+ 		PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
 
-	if (!php_var_unserialize(return_value, (const unsigned char **)&value_tmp, (const unsigned char *)(value_tmp + value_len), &var_hash TSRMLS_CC)) {
-        if (!MEMCACHE_G(debug_mode)) {
-            ZVAL_FALSE(*return_value);
-            PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
-            efree(value);
-            php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s, server=%s", key, host);
-            return 0;
-        } else {
-
-            ZVAL_STRINGL(*return_value, value, value_len, 1);
-            php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s, server=%s, raw value returned as zval string", key, host);
-        }
-	}
-
-	LogManager::getLogger()->stopSerialTime();
-
-	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	} else if(flags & MMC_SERIALIZED_IGBINARY) {
+ 	#ifdef HAVE_MEMCACHE_IGBINARY
+		LogManager::getLogger()->startSerialTime();
+ 		/* igbinary functions return 0 on success */
+ 		if( igbinary_unserialize((uint8_t *)value, value_len, return_value TSRMLS_CC) != 0 ) {
+ 			if (!MEMCACHE_G(debug_mode)) {
+ 				ZVAL_FALSE(*return_value);
+ 				efree(value);
+ 				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to igbinary_unserialize data for key=%s, server=%s", key, host);
+ 				return 0;
+ 			} else {
+ 				ZVAL_STRINGL(*return_value, value, value_len, 1);
+ 				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to igbinary_unserialize data for key=%s, server=%s, raw value returned as zval string", key, host);
+ 			}
+ 		}
+		LogManager::getLogger()->stopSerialTime();
+ 	#else
+ 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Missing igbinary support (key=%s)", key);
+ 		efree(value);
+ 		return 0;
+ 	#endif
+  	}
+ 
 	efree(value);
 	return 1;
 }
@@ -1873,8 +1996,8 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 				result = -1;
 			}
 
-			else if (flags & MMC_SERIALIZED) {
-				result = mmc_postprocess_value(key, mmc->host, return_value, value, value_len TSRMLS_CC);
+			else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
+				result = mmc_postprocess_value(key, flags, mmc->host, return_value, value, value_len TSRMLS_CC);
 			}
 			else if (0 == cas) {
 				/* no lock error, the cas value should never be zero */
@@ -2054,8 +2177,8 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 				LogManager::getLogger()->setCode(MC_MALFORMD);
 				result = -1;
 			}
-			else if (flags & MMC_SERIALIZED) {
-				result = mmc_postprocess_value(key, mmc->host, return_value, value, value_len TSRMLS_CC);
+			else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
+				result = mmc_postprocess_value(key, flags, mmc->host, return_value, value, value_len TSRMLS_CC);
 			}
 			else {
 				ZVAL_STRINGL(*return_value, value, value_len, 0);
@@ -2182,6 +2305,7 @@ static int mmc_exec_retrieval_cmd_multi(
 	int	i = 0, j, num_requests, result, result_status, result_key_len, value_len, flags;
 	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
 	mmc_queue_t serialized_key = {0};	/* pointers to corresponding keys */
+	mmc_queue_t serialized_flags = {0};	/* pointers to corresponding flags */
 
 	array_init(*return_value);
 
@@ -2266,7 +2390,7 @@ static int mmc_exec_retrieval_cmd_multi(
 							add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
 						}
 					}
-					else if (flags & MMC_SERIALIZED) {
+					else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
 						zval *result;
 						MAKE_STD_ZVAL(result);
 						ZVAL_STRINGL(result, value, value_len, 0);
@@ -2275,6 +2399,7 @@ static int mmc_exec_retrieval_cmd_multi(
 						if (zend_hash_add(Z_ARRVAL_PP(return_value), result_key, result_key_len + 1, &result, sizeof(result), NULL) == SUCCESS) {
 							mmc_queue_push(&serialized, result);
 							mmc_queue_push(&serialized_key, result_key);
+							mmc_queue_push(&serialized_flags, (void*)(unsigned long)flags);
 							free_key = 0;
 						}
 						else {
@@ -2321,10 +2446,12 @@ static int mmc_exec_retrieval_cmd_multi(
 	if (serialized.len) {
 		zval *value;
 		char *key;
+		int flag;
 
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
 			key = (char *)mmc_queue_pop(&serialized_key);
-			if (result = mmc_postprocess_value(key, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+ 			flag = (int) (unsigned long) (void*) mmc_queue_pop(&serialized_flags);
+			if (result = mmc_postprocess_value(key, flag, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
 				/* unserialize failed */
 				if (status_array) {
 					add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
@@ -2335,6 +2462,7 @@ static int mmc_exec_retrieval_cmd_multi(
 
 		mmc_queue_free(&serialized);
 		mmc_queue_free(&serialized_key);
+		mmc_queue_free(&serialized_flags);
 	}
 
 	mmc_free_multi(TSRMLS_C);
@@ -2436,7 +2564,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 #define PECL_MIN(a,b) a < b ? a : b
 
-		if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
+		if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2)) {
 			// Reading compressed crc checksum	
 
 			min_len = PECL_MIN(data_len, MMC_CHKSUM_LEN);
@@ -2511,7 +2639,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	}
 #undef PECL_MIN
 
-	if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO)) {
+	if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2)) {
 		char *result_data;
 		unsigned long result_len = 0;
 
@@ -2947,6 +3075,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 	
 	switch (Z_TYPE_P(value)) {
 		case IS_STRING:
+			flags = flags & ~(MMC_SERIALIZED_IGBINARY);
 			result = mmc_pool_store(
 				pool, command, command_len, key_tmp, key_tmp_len, flags, expire, cas,
 				Z_STRVAL_P(value), Z_STRLEN_P(value), by_key, shard_key_tmp, shard_key_tmp_len, val_len TSRMLS_CC);
@@ -2956,6 +3085,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 		case IS_DOUBLE:
 		case IS_BOOL: {
 			zval value_copy;
+			flags = flags & ~(MMC_SERIALIZED_IGBINARY);
 
 			/* FIXME: we should be using 'Z' instead of this, but unfortunately it's PHP5-only */
 			value_copy = *value;
@@ -2980,20 +3110,37 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 
 			LogManager::getLogger()->startSerialTime();
 
-			PHP_VAR_SERIALIZE_INIT(value_hash);
-			php_var_serialize(&buf, &value_copy_ptr, &value_hash TSRMLS_CC);
-			PHP_VAR_SERIALIZE_DESTROY(value_hash);
+ 			if(flags & MMC_SERIALIZED_IGBINARY) {
+ 			#ifdef HAVE_MEMCACHE_IGBINARY
+ 				result = igbinary_serialize((uint8_t **) &buf.c, &buf.len, value TSRMLS_CC);
+ 				if( result != 0 ) {
+ 					smart_str_free(&buf);
+ 					php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to igbinary_serialize value");
+ 					return 0;
+ 				}
+ 				flags |= MMC_SERIALIZED_IGBINARY; /* clarity's sake */
+ 			#else
+ 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Missing igbinary support");
+ 				return 0;
+ 			#endif
+ 			}
+ 			else { 
+ 				PHP_VAR_SERIALIZE_INIT(value_hash);
+ 				php_var_serialize(&buf, &value_copy_ptr, &value_hash TSRMLS_CC);
+ 				PHP_VAR_SERIALIZE_DESTROY(value_hash);
+ 
+ 				if (!buf.c) {
+ 					/* something went really wrong */
+ 					zval_dtor(&value_copy);
+ 					php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to serialize value");
+ 					return 0;
+ 				}
+ 
+ 				flags |= MMC_SERIALIZED;
+ 			}
 
 			LogManager::getLogger()->stopSerialTime();
 
-			if (!buf.c) {
-				/* something went really wrong */
-				zval_dtor(&value_copy);
-				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to serialize value");
-				return 0;
-			}
-
-			flags |= MMC_SERIALIZED;
 			zval_dtor(&value_copy);
 
 			result = mmc_pool_store(
@@ -3001,7 +3148,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 				buf.c, buf.len, by_key, shard_key_tmp, shard_key_tmp_len, val_len TSRMLS_CC);
 		}
 	}
-	if (flags & MMC_SERIALIZED) {
+	if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
 		smart_str_free(&buf);
 	}
 
@@ -4189,8 +4336,8 @@ static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zva
 						mmc_server_seterror(mmc, "Malformed END line", 0);
 						LogManager::getLogger()->setCode(MC_MALFORMD);	
 						result = -1;
-					} else if (flags & MMC_SERIALIZED) {
-						result = mmc_postprocess_value(key, mmc->host, &zvalue, value, value_len TSRMLS_CC);
+					} else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
+						result = mmc_postprocess_value(key, flags, mmc->host, &zvalue, value, value_len TSRMLS_CC);
 					} else {
 						ZVAL_STRINGL(zvalue, value, value_len, 0);
 					}

@@ -13,7 +13,7 @@ if ($memcache) {
 	$memcache->set($key, "TestValue1");
 	
     $test = $memcache->get($key, $flag, $oldcas);
-	echo "key '$key' cas '$cas' \n";
+	echo "key '$key' cas '$oldcas' \n";
     $cas = $oldcas;
 
 	$out = $memcache->cas($key, "testValue", $flag, 0, $cas);

@@ -91,13 +91,15 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.12"
+#define PHP_MEMCACHE_VERSION "2.4.1.13"
 
 #define MMC_BUF_SIZE 4096
-#define MMC_SERIALIZED 1
-#define MMC_COMPRESSED 2
-#define MMC_COMPRESSED_LZO 4
-#define MMC_CHKSUM	   8
+#define MMC_SERIALIZED				(1 << 0)
+#define MMC_COMPRESSED				(1 << 1)
+#define MMC_COMPRESSED_LZO			(1 << 2)
+#define MMC_CHKSUM					(1 << 3)
+#define MMC_COMPRESSED_BZIP2		(1 << 4) 
+#define MMC_SERIALIZED_IGBINARY		(1 << 5)
 #define MMC_DEFAULT_TIMEOUT 10000			/* milli seconds */
 #define MMC_KEY_MAX_SIZE 250				/* stoled from memcached sources =) */
 #define MMC_DEFAULT_RETRY 15 				/* retry failed server after x seconds */

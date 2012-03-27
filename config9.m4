@@ -8,6 +8,9 @@ PHP_ARG_ENABLE(memcache, whether to enable memcache support,
 PHP_ARG_ENABLE(memcache-session, whether to enable memcache session handler support,
 [  --disable-memcache-session       Disable memcache session handler support], yes, no)
 
+PHP_ARG_ENABLE(memcache-igbinary, whether to enable memcache igbinary serializer support,
+[ --enable-memcache-igbinary Enable memcache igbinary serializer support], yes, yes)
+
 if test -z "$PHP_ZLIB_DIR"; then
 PHP_ARG_WITH(zlib-dir, for the location of ZLIB,
 [  --with-zlib-dir[=DIR]   memcache: Set the path to ZLIB install prefix.], no, no)
@@ -63,6 +66,25 @@ if test "$PHP_MEMCACHE" != "no"; then
     PHP_ADD_INCLUDE($PHP_ZLIB_INCDIR)
   fi
 
+  dnl check bzip2  
+	AC_MSG_CHECKING(for BZip2 in default path)
+	for i in /usr/local /usr; do
+	  if test -r $i/include/bzlib.h; then
+	    BZIP_DIR=$i
+	    AC_MSG_RESULT(found in $i)
+	  fi
+	done
+
+  if test -z "$BZIP_DIR"; then
+    AC_MSG_RESULT(not found)
+    AC_MSG_ERROR(Please reinstall the BZip2 distribution)
+  fi
+
+  PHP_ADD_INCLUDE($BZIP_DIR/include)
+
+  PHP_ADD_LIBRARY_WITH_PATH(bz2, $BZIP_DIR/lib, MEMCACHE_SHARED_LIBADD)
+  AC_CHECK_LIB(bz2, BZ2_bzerror, [AC_DEFINE(HAVE_BZ2,1,[ ])], [AC_MSG_ERROR(bz2 module requires libbz2 >= 1.0.0)],)
+
  
   if test "$PHP_MEMCACHE_SESSION" != "no"; then 
 	AC_MSG_CHECKING([for session includes])
@@ -87,6 +109,49 @@ if test "$PHP_MEMCACHE" != "no"; then
     else
       AC_MSG_RESULT([$session_inc_path])
     fi
+  fi
+
+  dnl check igbinary include 
+    
+  if test "$PHP_MEMCACHED_IGBINARY" != "no"; then
+    AC_MSG_CHECKING([for igbinary includes])
+    igbinary_inc_path=""
+
+    if test -f "$abs_srcdir/include/php/ext/igbinary/igbinary.h"; then
+      igbinary_inc_path="$abs_srcdir/include/php"
+    elif test -f "$abs_srcdir/ext/igbinary/igbinary.h"; then
+      igbinary_inc_path="$abs_srcdir"
+    elif test -f "$phpincludedir/ext/session/igbinary.h"; then
+      igbinary_inc_path="$phpincludedir"
+    elif test -f "$phpincludedir/ext/igbinary/igbinary.h"; then
+      igbinary_inc_path="$phpincludedir"
+    else
+      for i in php php4 php5 php6; do
+        if test -f "$prefix/include/$i/ext/igbinary/igbinary.h"; then
+          igbinary_inc_path="$prefix/include/$i"
+        fi
+      done
+    fi
+
+    if test "$igbinary_inc_path" = ""; then
+      AC_MSG_ERROR([Cannot find igbinary.h])
+    else
+      AC_MSG_RESULT([$igbinary_inc_path])
+    fi
+  fi  
+  
+  AC_MSG_CHECKING([for memcache igbinary support])
+  if test "$PHP_MEMCACHE_IGBINARY" != "no"; then
+    AC_MSG_RESULT([enabled])
+    AC_DEFINE(HAVE_MEMCACHE_IGBINARY,1,[Whether memcache igbinary serializer is enabled])
+    IGBINARY_INCLUDES="-I$igbinary_inc_path"
+    ifdef([PHP_ADD_EXTENSION_DEP],
+    [
+      PHP_ADD_EXTENSION_DEP(memcache, igbinary)
+    ])
+  else
+    IGBINARY_INCLUDES=""
+    AC_MSG_RESULT([disabled])
   fi
 
   AC_CHECK_TYPE(ptrdiff_t,long)
