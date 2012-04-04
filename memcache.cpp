@@ -1923,6 +1923,7 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
  		PHP_VAR_UNSERIALIZE_INIT(var_hash);
 		LogManager::getLogger()->startSerialTime();
  		if (!php_var_unserialize(return_value, (const unsigned char **)&value_tmp, (const unsigned char *)(value_tmp + value_len), &var_hash TSRMLS_CC)) {
+
  			if (!MEMCACHE_G(debug_mode)) {
  				ZVAL_FALSE(*return_value);
  				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
@@ -1942,6 +1943,7 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
 		LogManager::getLogger()->startSerialTime();
  		/* igbinary functions return 0 on success */
  		if( igbinary_unserialize((uint8_t *)value, value_len, return_value TSRMLS_CC) != 0 ) {
+
  			if (!MEMCACHE_G(debug_mode)) {
  				ZVAL_FALSE(*return_value);
  				efree(value);
@@ -2506,7 +2508,6 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		return -1;
 	}
 
-	
 	
 	/* reached the end of the data */
 	if (mmc_str_left(mmc->inbuf, "END", response_len, sizeof("END") - 1)) {
@@ -4487,6 +4488,24 @@ PHP_FUNCTION(memcache_getMultiByKey) {
 	return;
 }
 
+
+static void update_multibykey_result_array(zval **result_array, char *line) {
+	if (result_array == NULL) {
+		return;
+	}
+	token_t tokens[MAX_TOKENS];
+	int i;
+	int ntokens = tokenize_command(line, (token_t *)&tokens, MAX_TOKENS);
+
+	for (i = 1; i < ntokens; i++) {
+		zval **value_array;
+		if (tokens[i].value && zend_hash_find(Z_ARRVAL_P(*result_array), tokens[i].value, tokens[i].length+1, (void **)&(value_array)) != FAILURE) {
+			add_assoc_bool(*value_array, "status", 0);
+		}
+	}
+}
+
+
 /**
  * See PHP_FUNCTION(memcache_getMultiByKey)
  *
@@ -4505,84 +4524,206 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 	MMC_DEBUG(("php_mmc_get_multi_by_key: Entry"));
 
 	HashTable *key_hash;
-	int key_array_count = 0;
+	int i = 0, j;
+	char *command_line[pool->num_servers];  
+	int flags;
+	unsigned long cas;
+	int result;
+	char *value, *result_key;
+	int value_len, result_key_len;
+	mmc_t *mmc;
+	int result_status = 0, num_requests = 0;
+
+	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
+	mmc_queue_t serialized_key = {0};	/* pointers to corresponding keys */
+	mmc_queue_t serialized_flags = {0};	/* pointers to corresponding flags */
+
 
 	// Start with a clean return array
 	array_init(*return_value);
 
 	key_hash = Z_ARRVAL_P(zkey_array);
-	key_array_count = zend_hash_num_elements(key_hash);
 
-	MMC_DEBUG(("php_mmc_get_multi_by_key: The key array passed contains %d elements ", key_array_count));
+	do 
+	{
+		result_status = 0, num_requests = 0;
+		// Go through all of the key => value pairs and send the request to each server without waiting for response
+		for (zend_hash_internal_pointer_reset(key_hash); zend_hash_has_more_elements(key_hash) == SUCCESS; zend_hash_move_forward(key_hash)) {
 
-	// Go through all of the key => value pairs and send the request without waiting for the responses just yet for performance improvements
-	for (zend_hash_internal_pointer_reset(key_hash); zend_hash_has_more_elements(key_hash) == SUCCESS; zend_hash_move_forward(key_hash)) {
+			char *input_key;
+			unsigned int input_key_len;
+			ulong idx;
+			zval **zshardkey;
+			zval *zkey;
+			zval **value_array;
+			static char key[MMC_KEY_MAX_SIZE];
+			char shardkey[MMC_KEY_MAX_SIZE];
+			unsigned int key_len, shardkey_len;
+			int key_exists = 0;
 
-		char *input_key;
-		unsigned int input_key_len;
-		zval *flags = NULL;
-		MAKE_STD_ZVAL(flags);
-		zval *cas = NULL;
-		MAKE_STD_ZVAL(cas);
-		ulong idx;
-		zval **data;
-		int result;
-		zval *zvalue;
-		MAKE_STD_ZVAL(zvalue);
-		zval *value_array;
-		ALLOC_INIT_ZVAL(value_array);
-		array_init(value_array);
+			if (zend_hash_get_current_key_ex(key_hash, &input_key, &input_key_len, &idx, 0, NULL) != HASH_KEY_IS_STRING) {
 
-		if (zend_hash_get_current_key_ex(key_hash, &input_key, &input_key_len, &idx, 0, NULL) == HASH_KEY_IS_STRING) {
-
-			add_assoc_zval(*return_value, input_key, value_array);
-
-			if (zend_hash_get_current_data(key_hash, (void**) &data) == FAILURE) {
-				MMC_DEBUG(("php_mmc_get_multi_by_key: No data for key '%s'", input_key));
-				// Should never actually fail since the key is known to exist.
-				add_assoc_bool(value_array, "status", 0);
+				php_error_docref(NULL TSRMLS_CC, E_ERROR, "Key passed in wasn't a string type");
 				continue;
 			}
 
-			MMC_DEBUG(("php_mmc_get_multi_by_key: Sending command for key '%s' with shard key '%s'", input_key, Z_STRVAL_PP(data)));
+			if (mmc_prepare_key_ex(input_key, strlen(input_key), key, &key_len TSRMLS_CC) != MMC_OK) {
+				MMC_DEBUG(("Problem with the key"));  
+				continue;
+			}
 
-			//Copy the input_key into a temp string to be passed along
-			char *str;
-			str = estrdup(input_key);
-			zval *zkey;
-			MAKE_STD_ZVAL(zkey);
-			ZVAL_STRING(zkey, str, 1);
+			// Add key if it is not already there
+			if (!zend_hash_exists(Z_ARRVAL_PP(return_value), key, key_len+1)) {
+				zval *add_value_array;
+				ALLOC_INIT_ZVAL(add_value_array);
+				array_init(add_value_array);
+				zend_hash_add(Z_ARRVAL_PP(return_value), key, key_len + 1 , &add_value_array, sizeof(add_value_array), NULL);
 
-			zval_add_ref(data);
-			add_assoc_zval(value_array, "shardKey", *data);
-
-			if ((result = php_mmc_get_by_key(pool, zkey, *data, zvalue, flags, cas TSRMLS_CC)) < 0) {
-				MMC_DEBUG(("php_mmc_get_multi_by_key: Get failed for key '%s'", input_key));
-				add_assoc_bool(value_array, "status", 0);
-			} else {
-				MMC_DEBUG(("php_mmc_get_multi_by_key: Get was successful for key '%s'", input_key));
-				add_assoc_bool(value_array, "status", 1);
-
-				if (result > 0) {
-					MMC_DEBUG(("php_mmc_get_multi_by_key: value retrieved"));
-					add_assoc_zval(value_array, "value", zvalue);
-					add_assoc_zval(value_array, "flag", flags);
-					add_assoc_zval(value_array, "cas", cas);
-				} else {
-					MMC_DEBUG(("php_mmc_get_multi_by_key: Nothing returned from Get for key '%s'", input_key));
-					zval_ptr_dtor(&flags);
-					zval_ptr_dtor(&cas);
-					zval_ptr_dtor(&zvalue);
-					add_assoc_null(value_array, "value");
+				value_array = &add_value_array;
+			}
+			else {
+				
+				if (zend_hash_find(Z_ARRVAL_PP(return_value), key, key_len + 1, (void **)&(value_array)) == FAILURE) {
+					continue;
 				}
 			}
-			zval_ptr_dtor(&zkey);
-			efree(str);
-		} else {
-			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Key passed in wasn't a string type");
-		}
-	}
+	
+			if (zend_hash_get_current_data(key_hash, (void**) &zshardkey) == FAILURE) {
+				MMC_DEBUG(("php_mmc_get_multi_by_key: No data for key '%s'", key));
+				// Should never actually fail since the key is known to exist.
+				add_assoc_bool(*value_array, "status", 0);
+				continue;
+			}
 
+			if (mmc_prepare_key(*zshardkey, shardkey, &shardkey_len TSRMLS_CC) != MMC_OK) {
+				MMC_DEBUG(("Problem with the shardkey"));  
+				add_assoc_bool(*value_array, "status", 0);
+				continue;
+			}
+
+			if (!i || !zend_hash_exists(Z_ARRVAL_PP(value_array), "shardKey", sizeof("shardKey")))
+				add_assoc_zval(*value_array, "shardKey", *zshardkey);
+
+			/* schedule key if first round or if missing from result */
+			if (!i || !(key_exists = zend_hash_exists(Z_ARRVAL_PP(value_array), "value", sizeof("value")))) {
+				if ((mmc = mmc_pool_find(pool, shardkey, shardkey_len TSRMLS_CC)) != NULL &&
+					mmc->status != MMC_STATUS_FAILED) {
+					if (!(mmc->outbuf.len)) {
+						append_php_smart_string(&(mmc->outbuf), "gets", sizeof("gets")-1);
+						pool->requests[num_requests++] = mmc;
+					}
+
+					append_php_smart_string(&(mmc->outbuf), " ", 1);
+					append_php_smart_string(&(mmc->outbuf), key, key_len);
+					MMC_DEBUG(("mmc_exec_retrieval_cmd_multi: scheduled key '%s' for '%s:%d' request length '%d'", key, mmc->host, mmc->port, mmc->outbuf.len));
+
+				} else  {
+					 /*key belongs to a failed server */
+					add_assoc_bool(*value_array, "status", 0);
+				}
+			}
+		}
+
+		/* second pass to send requests in parallel */
+		for (j=0; j<num_requests; j++) {
+			smart_str_0(&(pool->requests[j]->outbuf));
+
+			command_line[j] = (char *)emalloc(pool->requests[j]->outbuf.len + 1);
+			memcpy(command_line[j], pool->requests[j]->outbuf.c, pool->requests[j]->outbuf.len);
+			command_line[j][pool->requests[j]->outbuf.len] = '\0';
+
+			if ((result = mmc_sendcmd(pool->requests[j], pool->requests[j]->outbuf.c, pool->requests[j]->outbuf.len TSRMLS_CC)) < 0) {
+				mmc_server_failure(pool->requests[j] TSRMLS_CC);
+				result_status = result;
+				update_multibykey_result_array(&(*return_value), command_line[j]);
+			}
+		}
+
+
+		/* third pass to read responses */
+		for (j=0; j<num_requests; j++) {
+			if (pool->requests[j]->status != MMC_STATUS_FAILED) {
+
+				for (value = NULL; (result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, &cas TSRMLS_CC)) > 0 || result == -2; value = NULL) {
+
+					int free_key = 1;
+					int find_retval;
+					zval **value_array;
+
+					if ((find_retval = zend_hash_find(Z_ARRVAL_PP(return_value), result_key, result_key_len + 1, (void **)&(value_array))) == FAILURE) {
+						continue;
+					}
+
+					if (result == -2) {
+						/* uncompression failed */
+						add_assoc_bool(*value_array, "status", 0);
+					}
+					else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
+						/* don't store duplicate values */
+						if (!zend_hash_exists(Z_ARRVAL_PP(value_array), "value", sizeof("value"))) {
+							zval *zvalue;
+							MAKE_STD_ZVAL(zvalue);
+							ZVAL_STRINGL(zvalue, value, value_len, 0);
+							add_assoc_zval(*value_array, "value", zvalue);
+							mmc_queue_push(&serialized, zvalue);
+							mmc_queue_push(&serialized_key, result_key);
+							mmc_queue_push(&serialized_flags, (void*)(unsigned long)flags);
+							free_key = 0;
+						}
+					}
+					else {
+						zval *zvalue;
+						MAKE_STD_ZVAL(zvalue);
+						ZVAL_STRINGL(zvalue, value, value_len, 0);
+						add_assoc_zval(*value_array, "value", zvalue);
+					}
+
+					add_assoc_bool(*value_array, "status", 1);
+					add_assoc_long_ex(*value_array, "flag", sizeof("flag"), flags); 
+					add_assoc_long_ex(*value_array, "cas", sizeof("cas"), cas); 
+
+					if (free_key) {
+						efree(result_key);
+					}
+				}
+
+				/* check for server failure */
+				if (result < 0) {
+					mmc_server_failure(pool->requests[j] TSRMLS_CC);
+					result_status = result;
+					update_multibykey_result_array(&(*return_value), command_line[j]);
+				}
+			}
+
+			smart_str_free(&(pool->requests[j]->outbuf));
+			efree(command_line[j]);
+		}
+	} while (result_status < 0 && MEMCACHE_G(allow_failover) && i++ < MEMCACHE_G(max_failover_attempts));
+
+
+	/* post-process serialized values */
+	if (serialized.len) {
+		zval *value;
+		char *key;
+		int flag;
+
+		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
+			key = (char *)mmc_queue_pop(&serialized_key);
+ 			flag = (int) (unsigned long) (void*) mmc_queue_pop(&serialized_flags);
+			if (result = mmc_postprocess_value(key, flag, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+				zval **value_array;
+				/* unserialize failed */
+				if (zend_hash_find(Z_ARRVAL_PP(return_value), key, strlen(key)+1, (void **)&(value_array)) == SUCCESS) {
+					add_assoc_bool(*value_array, "status", 0);
+				}
+			}
+			efree(key);
+		}
+
+		mmc_queue_free(&serialized);
+		mmc_queue_free(&serialized_key);
+		mmc_queue_free(&serialized_flags);
+	}
 
 	MMC_DEBUG(("php_mmc_get_multi_by_key: Exit"));
 }
