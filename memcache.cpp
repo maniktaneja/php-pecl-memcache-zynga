@@ -3785,14 +3785,21 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	LogManager::getLogger()->setFlags(flag);
 	LogManager::getLogger()->setExpiry(expire);
 
+	if (zval_cas) {
+		if (Z_TYPE_P(zval_cas) == IS_LONG) {
+			cas = Z_LVAL_P(zval_cas);
+		}
+		else {
+			LogManager::getLogger()->setCode(PARSE_ERROR);	
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Invalid CAS value");	
+			RETURN_FALSE;
+		}
+	}
+
 	if (val_len) {
 		convert_to_long(val_len);
 	}
-	
-	if (zval_cas) {
-		cas = Z_LVAL_P(zval_cas);
-	}
-	
+
 	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, command, command_len, by_key, val_len)) {
 		if (zval_cas) {
 			ZVAL_LONG(zval_cas, cas);	
