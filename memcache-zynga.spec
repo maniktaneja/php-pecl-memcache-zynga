@@ -129,7 +129,7 @@ default
 EOF
 %{__mkdir_p} %{buildroot}/etc/logrotate.d
 %{__cat} > %{buildroot}/etc/logrotate.d/pecl << 'EOF'
-/var/log/pecl-memcache.log {
+/var/log/pecl-* {
   sharedscripts
     notifempty
     missingok
@@ -149,11 +149,15 @@ EOF
 %post
 %{pecl_install} %{pecl_xmldir}/%{name}.xml >/dev/null || :
 if [ -f /etc/syslog-ng/syslog-ng.conf ];then
-sed /pecl_log/d /etc/syslog-ng/syslog-ng.conf > /tmp/back
+sed /pecl_.*log/d /etc/syslog-ng/syslog-ng.conf > /tmp/back
 mv /tmp/back /etc/syslog-ng/syslog-ng.conf
 echo 'destination d_pecl_log { file("/var/log/pecl-memcache.log" owner("root") group ("root") perm(0644) ); }; 
 filter f_pecl_log { facility(local4) and level(debug) and match('pecl-memcache'); };                             
-log { source(s_sys); filter(f_pecl_log); destination(d_pecl_log); };' >> /etc/syslog-ng/syslog-ng.conf
+log { source(s_sys); filter(f_pecl_log); destination(d_pecl_log); };
+
+destination d_pecl_apache_log { file("/var/log/pecl-apache.log" owner("root") group ("root") perm(0644) ); }; 
+filter f_pecl_apache_log { facility(local5) and level(debug) and match('pecl-memcache'); };         
+log { source(s_sys); filter(f_pecl_apache_log); destination(d_pecl_apache_log); };' >> /etc/syslog-ng/syslog-ng.conf
 fi
 /sbin/service syslog-ng restart      
 %endif
@@ -179,6 +183,9 @@ fi
 
 
 %changelog
+
+* Wed Apr 04 2012 <nigupta@zynga.com> 2.4.1.14
+- Request logging changes for pecl-memcache
 
 * Tue Mar 27 2012 <nigupta@zynga.com> 2.4.1.13
 - cas2 changes for pecl-memcache with igbinary

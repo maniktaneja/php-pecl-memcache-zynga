@@ -10,6 +10,7 @@
 #include <stdarg.h>
 #include <iostream>
 #include "parser.h"
+#include "log.h"
 
 #ifndef O_LARGEFILE
 # define O_LARGEFILE 0
@@ -17,7 +18,6 @@
 
 #define MAX_LOGBUF_LEN 4*1024
 #include <sys/time.h>
-#define LOG_IDENT   "pecl-memcache"
 
 int fileOut::open(const char *logFile) {
     if (logFile && logMode == ERRORLOG_FILE) {
@@ -47,7 +47,6 @@ void fileOut::close() {
     }
 }
 
-
 int fileOut::write(const char *fmt, ...) {
     va_list ap;
     LOG("in the write function");
@@ -74,7 +73,7 @@ int fileOut::write(const char *fmt, ...) {
 }
 
 int syslogOut::open(const char *p) {
-    openlog(LOG_IDENT, LOG_CONS | LOG_PID,  LOG_LOCAL4);
+    openlog(LOG_IDENT_PECL, LOG_CONS | LOG_PID,  LOG_LOCAL4);
     return 0;
 }
 
@@ -98,7 +97,7 @@ int syslogOut::write(const char *fmt, ...) {
 
     logbuf[logbuf_used] = '\n';
     logbuf[logbuf_used+1] = '\0';
-    syslog(LOG_DEBUG, "%s", logbuf);  
+    syslog(type, "%s", logbuf);  
     return 0;
 }
 

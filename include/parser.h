@@ -8,19 +8,10 @@
 #include<iterator>
 #include<stack>
 #include<map>
-
-#define ERRORLOG_STDERR        1
-#define ERRORLOG_FILE          2
-#define ERRORLOG_SYSLOG        3
+#include "log.h"
 
 enum tokenType {OPRTR, OPRND, VALUE, END, NA, ERROR};
 enum oprType {OR, AND, PM, EQ, NEQ, CTN, GT, LT, SEQ, BrcsStr, BrcsStp};
-
-#ifdef DEBUG
-#define LOG(fmt, ...) fprintf(stderr,"%s %d "fmt"\n",__FILE__,__LINE__, ##__VA_ARGS__);
-#else
-#define LOG(fmt, ...)
-#endif
 
 class token {
 public:
@@ -247,13 +238,6 @@ public:
     }
 }; 
 
-class logOutPut {
-public:
-   virtual int open(const char *logFile) = 0; 
-   virtual void close() = 0;
-   virtual int write(const char *fmt, ...) = 0;
-};
-
 class exprParser {
 public:
     exprParser(std::string &st) : str(st), root(NULL), out(NULL){
@@ -334,22 +318,4 @@ private:
     std::map<std::string, exprParser *> exprMap;
 };
 
-class fileOut : public logOutPut {
-public:
-   int open(const char *logFile); 
-   void close();
-   int write(const char *fmt, ...);
-    fileOut():logFd(-1),logMode(ERRORLOG_FILE) {
-    }
-private:
-    int logFd;   
-    int logMode;
-};
-
-class syslogOut : public logOutPut {
-public:
-   int open(const char *p); 
-   void close();
-   int write(const char *fmt, ...);
-};
 #endif

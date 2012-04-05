@@ -50,6 +50,7 @@ extern "C" {
 #include "ext/standard/php_string.h"
 #include "ext/standard/php_var.h"
 #include "ext/standard/php_smart_str.h"
+#include "SAPI.h"
 
 #ifdef HAVE_MEMCACHE_IGBINARY
 	#include "ext/igbinary/igbinary.h"
@@ -75,7 +76,9 @@ static void php_memcache_destroy_globals(zend_memcache_globals *memcache_globals
 }
 
 mc_logger_t * LogManager::val = NULL;
-mc_logger_t *logData; 
+mc_logger_t *logData;
+bool RequestLogger::enabled = false; 
+RequestLogger *RequestLogger::m_instance = NULL;
 
 ZEND_DECLARE_MODULE_GLOBALS(memcache)
 
@@ -310,7 +313,7 @@ zend_module_entry memcache_module_entry = {
 	PHP_MINIT(memcache),
 	PHP_MSHUTDOWN(memcache),
 	PHP_RINIT(memcache),
-	NULL,
+	PHP_RSHUTDOWN(memcache),
 	PHP_MINFO(memcache),
 #if ZEND_MODULE_API_NO >= 20010901
 	PHP_MEMCACHE_VERSION,
@@ -589,13 +592,24 @@ PHP_MSHUTDOWN_FUNCTION(memcache)
 PHP_RINIT_FUNCTION(memcache)
 {
 	const char *err;
+	zval **data;
 	MEMCACHE_G(debug_mode) = 0;
 	MEMCACHE_G(in_multi) = 0;
 	MEMCACHE_G(proxy_connect_failed) = 0;
-	if (err = LogManager::checkAndLoadConfig(MEMCACHE_G(log_conf))) {
+	if ((err = LogManager::checkAndLoadConfig(MEMCACHE_G(log_conf)))) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Error in expr parsing %s in file %s. Please fix the error to logging to work", err, MEMCACHE_G(log_conf));
 	}
+
+	RequestLogger::instance()->initialize();
 	return SUCCESS;
+}
+/* }}} */
+
+/*{{{
+*/
+PHP_RSHUTDOWN_FUNCTION(memcache)
+{
+	RequestLogger::instance()->finalize(SG(request_info).request_uri);
 }
 /* }}} */
 
@@ -3759,18 +3773,6 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	static char *bykey_cmd = NULL;
 	static int bykey_cmd_len = 0;
 
-	if(by_key) {
-		if(bykey_cmd_len < command_len + sizeof("ByKey")) {
-			bykey_cmd_len =  command_len + sizeof("ByKey");
-			bykey_cmd = (char *)erealloc(bykey_cmd, bykey_cmd_len);
-		}		
-		strncpy(bykey_cmd, command, command_len);
-		strncpy(bykey_cmd + command_len, "ByKey", sizeof("ByKey"));
-		LogManager::getLogger()->setCmd(bykey_cmd);
-	} else {
-		LogManager::getLogger()->setCmd(command);
-	}
-
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lllsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &zval_cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);	
@@ -3783,8 +3785,18 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 		}
 	}
 
+	if (by_key) {
+		static char bykey_cmd[MMC_KEY_MAX_SIZE];
+		strncpy(bykey_cmd, command, command_len);
+		strncpy(bykey_cmd + command_len, "ByKey", sizeof("ByKey"));
+		LogManager::getLogger()->setCmd(bykey_cmd);
+	} else {
+		LogManager::getLogger()->setCmd(command);
+	}
+
 	LogManager::getLogger()->setFlags(flag);
 	LogManager::getLogger()->setExpiry(expire);
+	LogManager::getLogger()->setCommandType(SET);
 
 	if (zval_cas) {
 		if (Z_TYPE_P(zval_cas) == IS_LONG) {
@@ -4757,7 +4769,8 @@ PHP_FUNCTION(memcache_getl)
 		RETURN_FALSE;
 	}
 
-	LogManager::getLogger()->setLogName(pool->log_name);	
+	LogManager::getLogger()->setLogName(pool->log_name);
+	LogManager::getLogger()->setCommandType(GET);	
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
 }
@@ -4870,6 +4883,7 @@ PHP_FUNCTION(memcache_get)
 	mmc_pool_t *pool;
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
 	LogManager lm(logData);
+	zval **data;
 
 	LogManager::getLogger()->setCmd("get");
 
@@ -4957,6 +4971,7 @@ static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval 
 {
 	static char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
+	LogManager::getLogger()->setCommandType(GET);
 
 	if (Z_TYPE_P(zkey) != IS_ARRAY) {
 		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {

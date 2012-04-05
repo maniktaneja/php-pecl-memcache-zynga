@@ -41,6 +41,7 @@ extern zend_module_entry memcache_module_entry;
 PHP_MINIT_FUNCTION(memcache);
 PHP_MSHUTDOWN_FUNCTION(memcache);
 PHP_RINIT_FUNCTION(memcache);
+PHP_RSHUTDOWN_FUNCTION(memcache);
 PHP_MINFO_FUNCTION(memcache);
 
 PHP_FUNCTION(memcache_connect);
@@ -91,7 +92,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.13"
+#define PHP_MEMCACHE_VERSION "2.4.1.14"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)

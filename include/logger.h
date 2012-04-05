@@ -2,9 +2,15 @@
 #define __LOGGER_H__
 #include <sys/time.h>
 #include <syslog.h>
-enum field_type {INVAL, STRING, NUMBER};
+#include <sstream>
+#include "log.h"
 
+enum field_type {INVAL, STRING, NUMBER};
+enum cmdType {OTHERS = 0, GET, SET};
+class RequestLogger; 
+class logOutPut;
 typedef struct timeval timeStruct;
+
 
 class Timer {
 protected:
@@ -83,12 +89,100 @@ typedef struct mc_logger : public Timer {
         expiry = exp;
     }
 
+    void setCommandType(cmdType c) {
+        ctype = c;
+    }
+
     char *log_name;
     unsigned long long cas;
     timeStruct startTime;
+    cmdType ctype;
 
 } mc_logger_t;
 #undef __TN__
+
+class RequestLogger : public Timer {
+public:
+    static RequestLogger * instance() {
+        if (!m_instance) {
+            m_instance = new RequestLogger();
+        }
+        return m_instance;
+    }
+
+    void addTime(cmdType c, uint64_t t) {
+        switch (c) {
+            case GET:
+                getTime += t;
+                break;
+            case SET:
+                setTime += t;
+                break;
+            default:
+                otherTime += t;
+                break;
+        }
+    }
+
+    void initialize() {
+        count++;
+        if (!enabled) {
+            return;
+        }
+        recordTime(&startTime);
+        otherTime =
+        getTime = 
+        setTime = 0;
+    }
+
+    void finalize(char *p) {
+        if (enabled) {
+            recordTime(&endTime);
+            publishApacheRecord(p);
+        }
+    }
+
+    void setLogOutPut(logOutPut *f) {
+        enabled = true;
+        out = f;        
+    }   
+
+    void flushConfig() {
+        enabled = false;
+        if (out) {
+            out->close();
+            delete out;
+            out = NULL;
+        }
+    }
+
+    std::string getID() {
+        std::ostringstream out(id.str() ,std::ostringstream::app);
+        out << count;
+        return out.str();
+    }
+private:
+    RequestLogger():count(0), out(NULL) {
+        if ((pid = getpid()) < 0) {
+            pid = 0;
+        }
+        id << pid << ":";
+    }
+
+    void publishApacheRecord(char *uri) {
+        if (out) { 
+            out->write("%s %lu %lu %lu %d %.1024s", getID().c_str(), getTime, setTime, 
+                    getTime+setTime+otherTime, diffTime(startTime, endTime), uri);
+        }
+    }
+
+    static RequestLogger *m_instance;
+    timeStruct startTime, endTime;
+    std::ostringstream id;
+    unsigned long count, getTime, setTime, otherTime, pid;
+    static bool enabled;  
+    logOutPut *out;  
+};
 
 class LogManager : public Timer {
 public:
@@ -106,7 +200,9 @@ public:
     ~LogManager() {
         if (mPublish) {
             recordTime(&endTime);
-            val->setResTime(diffTime(startTime, endTime));
+            uint64_t tmp = diffTime(startTime, endTime);
+            RequestLogger::instance()->addTime(val->ctype, tmp);
+            val->setResTime(tmp);
             logPublishRecord(val);
         }
     }
@@ -125,7 +221,6 @@ private:
     static mc_logger_t *val;
     timeStruct startTime, endTime;
 };
-
 
 //request codes
 #define MC_SUCCESS              0x0
