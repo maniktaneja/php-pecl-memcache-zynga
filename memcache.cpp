@@ -3060,11 +3060,6 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 	php_serialize_data_t value_hash;
 	smart_str buf = {0};
 
-	/* If the cas == 0 and the command is 'cas', error */
-	if (cas == 0 && command[0] == 'c') {
-		return 0;
-	}
-
 	// If by key is true then lets validate the input
 	if (by_key) {
 		// Not sure why they validate input like this, but hey... if it works, why not...
@@ -3087,6 +3082,12 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 	}
 
 	LogManager::getLogger()->setLogName(pool->log_name);
+
+	/* If the cas == 0 and the command is 'cas', error */
+	if (cas == 0 && command[0] == 'c') {
+		return 0;
+	}
+
 	
 	switch (Z_TYPE_P(value)) {
 		case IS_STRING:
