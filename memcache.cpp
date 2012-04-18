@@ -3000,6 +3000,7 @@ static int mmc_incr_decr(mmc_t *mmc, int cmd, char *key, int key_len, int value,
 	char *command;
 	int  command_len, response_len;
 
+	LogManager::getLogger()->setCommandType(SET);
 	LogManager::getLogger()->setHost(mmc->host);
 
 	if (cmd > 0) {
