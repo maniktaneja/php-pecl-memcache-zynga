@@ -4602,8 +4602,9 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				ALLOC_INIT_ZVAL(add_value_array);
 				array_init(add_value_array);
 				zend_hash_add(Z_ARRVAL_PP(return_value), key, key_len + 1 , &add_value_array, sizeof(add_value_array), NULL);
-
 				value_array = &add_value_array;
+				add_assoc_bool(*value_array, "status", 1);
+				add_assoc_null(*value_array, "value");
 			}
 			else {
 				
@@ -5360,6 +5361,7 @@ PHP_FUNCTION(memcache_get_stats)
 				failures++;
 			}
 			else {
+				LogManager::getLogger()->setHost(pool->servers[i]->host);
 				break;
 			}
 		}

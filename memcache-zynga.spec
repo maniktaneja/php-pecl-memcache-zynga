@@ -129,7 +129,7 @@ default
 EOF
 %{__mkdir_p} %{buildroot}/etc/logrotate.d
 %{__cat} > %{buildroot}/etc/logrotate.d/pecl << 'EOF'
-/var/log/pecl-* {
+/var/log/pecl-memcache.log /var/log/pecl-apache.log {
   sharedscripts
     notifempty
     missingok
