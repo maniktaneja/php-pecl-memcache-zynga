@@ -3086,6 +3086,16 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 
 	/* If the cas == 0 and the command is 'cas', error */
 	if (cas == 0 && command[0] == 'c') {
+		mmc_t *mmc = NULL;
+		if (by_key) {
+			mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC);
+		} else {
+			mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC);
+		}
+		if (mmc) {
+			LogManager::getLogger()->setHost(mmc->host);
+		}
+		LogManager::getLogger()->setCode(INVALID_CAS);
 		return 0;
 	}
 

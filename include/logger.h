@@ -269,6 +269,7 @@ private:
 #define READ_VALUE_FAILED         125 
 #define UNCOMPRESS_FAILED         126 
 #define PARSE_RESPONSE_FAILED     127
+#define INVALID_CAS               128
 
 #endif
 
