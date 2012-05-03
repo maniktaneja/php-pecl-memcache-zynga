@@ -30,7 +30,7 @@ Requires:     php(zend-abi) = %{php_zend_api}
 %else
 #Requires:     php-api = %{php_apiver}
 %endif
-Requires:     php >= %{php_version}
+Requires:     php >= %{php_version}, php-igbinary
 Conflicts:    php-pecl(memcache)
 
 %description
