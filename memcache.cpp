@@ -2437,6 +2437,7 @@ static int mmc_exec_retrieval_cmd_multi(
 	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
 	mmc_queue_t serialized_key = {0};	/* pointers to corresponding keys */
 	mmc_queue_t serialized_flags = {0};	/* pointers to corresponding flags */
+	mmc_queue_t serialized_key_mmc = {0};	/* pointers to corresponding mmc */
 
 	array_init(*return_value);
 
@@ -2582,7 +2583,12 @@ static int mmc_exec_retrieval_cmd_multi(
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
 			key = (char *)mmc_queue_pop(&serialized_key);
  			flag = (int) (unsigned long) (void*) mmc_queue_pop(&serialized_flags);
-			if (result = mmc_postprocess_value(key, flag, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+			mmc_t *popped_mmc = (mmc_t *)(mmc_queue_pop(&serialized_key_mmc));
+			const char *hostname = (popped_mmc == NULL) ? "UNKNOWN" : popped_mmc->host;
+			if (popped_mmc == NULL) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "MMC NULL for (serialized) key %s", key);
+			}
+			if (result = mmc_postprocess_value(key, flag, hostname, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
 				/* unserialize failed */
 				if (status_array) {
 					add_assoc_bool_ex(*status_array, key, strlen(key) + 1, 0);
@@ -4686,7 +4692,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
 	mmc_queue_t serialized_key = {0};	/* pointers to corresponding keys */
 	mmc_queue_t serialized_flags = {0};	/* pointers to corresponding flags */
-
+	mmc_queue_t serialized_key_mmc = {0};   /* pointers to corresponding mmc */
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -4818,6 +4824,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 							mmc_queue_push(&serialized, zvalue);
 							mmc_queue_push(&serialized_key, result_key);
 							mmc_queue_push(&serialized_flags, (void*)(unsigned long)flags);
+							mmc_queue_push(&serialized_key_mmc, (void*)(pool->requests[j]));
 							free_key = 0;
 						}
 					}
@@ -4860,7 +4867,12 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
 			key = (char *)mmc_queue_pop(&serialized_key);
  			flag = (int) (unsigned long) (void*) mmc_queue_pop(&serialized_flags);
-			if (result = mmc_postprocess_value(key, flag, mmc->host, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
+			mmc_t *popped_mmc = (mmc_t *)(mmc_queue_pop(&serialized_key_mmc));
+			const char *hostname = (popped_mmc == NULL) ? "UNKNOWN" : popped_mmc->host;
+			if (popped_mmc == NULL) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "MMC NULL for (serialized) key %s", key);
+			}
+			if (result = mmc_postprocess_value(key, flag, hostname, &value, Z_STRVAL_P(value), Z_STRLEN_P(value) TSRMLS_CC) == 0) {
 				zval **value_array;
 				/* unserialize failed */
 				if (zend_hash_find(Z_ARRVAL_PP(return_value), key, strlen(key)+1, (void **)&(value_array)) == SUCCESS) {
