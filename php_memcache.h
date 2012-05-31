@@ -92,7 +92,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.15"
+#define PHP_MEMCACHE_VERSION "2.4.1.16"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)
