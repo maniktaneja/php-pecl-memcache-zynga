@@ -450,7 +450,7 @@ static PHP_INI_MH(OnUpdateLogConf) /* {{{ */
 
 /* {{{ PHP_INI */
 PHP_INI_BEGIN()
-	STD_PHP_INI_ENTRY("memcache.allow_failover",	"1",		PHP_INI_ALL, OnUpdateLong,		allow_failover,	zend_memcache_globals,	memcache_globals)
+	STD_PHP_INI_ENTRY("memcache.allow_failover",	"0",		PHP_INI_ALL, OnUpdateLong,		allow_failover,	zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.max_failover_attempts",	"20",	PHP_INI_ALL, OnUpdateFailoverAttempts,		max_failover_attempts,	zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.default_port",		"11211",	PHP_INI_ALL, OnUpdateLong,		default_port,	zend_memcache_globals,	memcache_globals)
 	STD_PHP_INI_ENTRY("memcache.chunk_size",		"8192",		PHP_INI_ALL, OnUpdateChunkSize,	chunk_size,		zend_memcache_globals,	memcache_globals)
@@ -4574,6 +4574,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 	char *value, *result_key;
 	int value_len, result_key_len;
 	mmc_t *mmc;
+	zval **test_value;
 	int result_status = 0, num_requests = 0;
 
 	mmc_queue_t serialized = {0};		/* mmc_queue_t<zval *>, pointers to zvals which need unserializing */
@@ -4601,7 +4602,6 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 			static char key[MMC_KEY_MAX_SIZE];
 			char shardkey[MMC_KEY_MAX_SIZE];
 			unsigned int key_len, shardkey_len;
-			int key_exists = 0;
 
 			if (zend_hash_get_current_key_ex(key_hash, &input_key, &input_key_len, &idx, 0, NULL) != HASH_KEY_IS_STRING) {
 
@@ -4625,7 +4625,6 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				add_assoc_null(*value_array, "value");
 			}
 			else {
-
 				if (zend_hash_find(Z_ARRVAL_PP(return_value), key, key_len + 1, (void **)&(value_array)) == FAILURE) {
 					continue;
 				}
@@ -4644,11 +4643,14 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				continue;
 			}
 
-			if (!i || !zend_hash_exists(Z_ARRVAL_PP(value_array), "shardKey", sizeof("shardKey")))
+			if (!i || !zend_hash_exists(Z_ARRVAL_PP(value_array), "shardKey", sizeof("shardKey"))) {
+  				ZVAL_ADDREF(*zshardkey);
 				add_assoc_zval(*value_array, "shardKey", *zshardkey);
+			}
 
-			/* schedule key if first round or if missing from result */
-			if (!i || !(key_exists = zend_hash_exists(Z_ARRVAL_PP(value_array), "value", sizeof("value")))) {
+			/* schedule key if first round or if value is NULL */
+			if (!i || (zend_hash_find(Z_ARRVAL_PP(value_array), "value", sizeof("value"), 
+				(void **)&test_value)) == SUCCESS && ZVAL_IS_NULL(*test_value)) {
 				if ((mmc = mmc_pool_find(pool, shardkey, shardkey_len TSRMLS_CC)) != NULL &&
 					mmc->status != MMC_STATUS_FAILED) {
 					if (!(mmc->outbuf.len)) {
@@ -4701,9 +4703,10 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 						/* uncompression failed */
 						add_assoc_bool(*value_array, "status", 0);
 					}
-					else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
+					else if ((flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) )  {
 						/* don't store duplicate values */
-						if (!zend_hash_exists(Z_ARRVAL_PP(value_array), "value", sizeof("value"))) {
+						if ((zend_hash_find(Z_ARRVAL_PP(value_array), "value", sizeof("value"), 
+							(void **)&test_value)) == SUCCESS && ZVAL_IS_NULL(*test_value)) {
 							zval *zvalue;
 							MAKE_STD_ZVAL(zvalue);
 							ZVAL_STRINGL(zvalue, value, value_len, 0);
