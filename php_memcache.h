@@ -92,14 +92,14 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.4.1.14"
+#define PHP_MEMCACHE_VERSION "2.4.1.16"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)
 #define MMC_COMPRESSED				(1 << 1)
 #define MMC_COMPRESSED_LZO			(1 << 2)
 #define MMC_CHKSUM					(1 << 3)
-#define MMC_COMPRESSED_BZIP2		(1 << 4) 
+#define MMC_COMPRESSED_BZIP2		(1 << 4)
 #define MMC_SERIALIZED_IGBINARY		(1 << 5)
 #define MMC_DEFAULT_TIMEOUT 10000			/* milli seconds */
 #define MMC_KEY_MAX_SIZE 250				/* stoled from memcached sources =) */
@@ -249,7 +249,7 @@ void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
 int mmc_pool_store_wrapper(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long, const char *, int, zend_bool, const char *, int ,zval *TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
-int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC); 
+int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 
