@@ -4836,17 +4836,22 @@ PHP_FUNCTION(memcache_getl)
 	LogManager::getLogger()->setLogName(pool->log_name);
 	LogManager::getLogger()->setCommandType(GET);
 
-	if (zval_metadata != NULL) {
-		metadata_len = Z_STRLEN_P(zval_metadata);
-		if (metadata_len > MAX_METADATA_LEN) {
-			metadata_len = MAX_METADATA_LEN;
+	if (zval_metadata != NULL) {  
+		if (Z_TYPE_P(zval_metadata) == IS_STRING) {
+			metadata_len = Z_STRLEN_P(zval_metadata);
+			if (metadata_len > MAX_METADATA_LEN) {
+				metadata_len = MAX_METADATA_LEN;
+			}
+			memcpy(metadata, Z_STRVAL_P(zval_metadata), metadata_len);
 		}
-		memcpy(metadata, Z_STRVAL_P(zval_metadata), metadata_len);
 	}
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout, metadata, metadata_len);
 	if (metadata_len > 0) {
-		zval_dtor(zval_metadata);
+		if (zval_metadata != NULL)
+			zval_dtor(zval_metadata);
+		else
+			MAKE_STD_ZVAL(zval_metadata);
 		ZVAL_STRINGL(zval_metadata, metadata, metadata_len, 1);
 	}
 }
