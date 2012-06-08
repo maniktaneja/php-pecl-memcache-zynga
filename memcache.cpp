@@ -1992,23 +1992,15 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	MMC_DEBUG(("mmc_exec_getl_cmd: key '%s'", key));
 	LogManager::getLogger()->setKey(key);
 
-	if (timeout < 0 || timeout > 30)
+	if (timeout <= 0 || timeout > 30)
 		timeout = 15;
 
-	if (timeout && metadata_len) {
+	if (metadata_len) {
 		command_len = spprintf(&command, 0, "getl %s %d %s", key, timeout, metadata);
 	}
-	else if (metadata_len) {
-		// Cannot pass metadata len without timeout
-		command_len = spprintf(&command, 0, "getl %s %d %s", key, 0, metadata);
-	}
-	else if (timeout) {
+	else {
 		command_len = spprintf(&command, 0, "getl %s %d", key, timeout);
 	}
-	else {
-		command_len = spprintf(&command, 0, "getl %s", key);
-	}
-
 
 	metadata_len = 0;
 	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL &&
@@ -2059,11 +2051,8 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 				metadata_len = strlen(mmc->inbuf) - (sizeof("LOCK_ERROR \r\n") - 1);
 				if (metadata_len > 0) {
 					memcpy(metadata, metadata_start, metadata_len);
-					metadata[metadata_len + 1] = '\0';
 				}
-				else {
-					metadata[0] = '\0';
-				}
+				metadata[metadata_len] = '\0';
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
 				/* key doesn't exist */
 				result = 0;
@@ -4843,15 +4832,16 @@ PHP_FUNCTION(memcache_getl)
 				metadata_len = MAX_METADATA_LEN;
 			}
 			memcpy(metadata, Z_STRVAL_P(zval_metadata), metadata_len);
+			metadata[metadata_len] = 0;
+		}
+		else {
+			RETURN_FALSE;
 		}
 	}
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout, metadata, metadata_len);
-	if (metadata_len > 0) {
-		if (zval_metadata != NULL)
-			zval_dtor(zval_metadata);
-		else
-			MAKE_STD_ZVAL(zval_metadata);
+	if (metadata_len > 0 && zval_metadata != NULL) {
+		zval_dtor(zval_metadata);
 		ZVAL_STRINGL(zval_metadata, metadata, metadata_len, 1);
 	}
 }
