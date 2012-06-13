@@ -1995,14 +1995,13 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	if (timeout <= 0 || timeout > 30)
 		timeout = 15;
 
-	if (metadata_len) {
+	if (metadata_len > 0) {
 		command_len = spprintf(&command, 0, "getl %s %d %s", key, timeout, metadata);
 	}
 	else {
 		command_len = spprintf(&command, 0, "getl %s %d", key, timeout);
 	}
 
-	metadata_len = 0;
 	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL &&
 		mmc->status != MMC_STATUS_FAILED) {
 		MMC_DEBUG(("mmc_exec_getl_cmd: found server '%s:%d' for key '%s'", mmc->host, mmc->port, key));
@@ -2051,8 +2050,12 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 				metadata_len = strlen(mmc->inbuf) - (sizeof("LOCK_ERROR \r\n") - 1);
 				if (metadata_len > 0) {
 					memcpy(metadata, metadata_start, metadata_len);
+					metadata[metadata_len] = '\0';
 				}
-				metadata[metadata_len] = '\0';
+				else {
+					metadata[0] = '\0';
+					metadata_len = 0;
+				}
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
 				/* key doesn't exist */
 				result = 0;
@@ -4799,7 +4802,9 @@ PHP_FUNCTION(memcache_getl)
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL, *zval_metadata = NULL;
 	int timeout = 15;
 	char metadata[MAX_METADATA_LEN + 1];
-	int metadata_len = 0;
+	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata. 
+								// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0 
+								// (=0 if there is a lock error but the lock has no metadata)
 
 	LogManager lm(logData);
 	LogManager::getLogger()->setCmd("getl");
@@ -4840,7 +4845,7 @@ PHP_FUNCTION(memcache_getl)
 	}
 
 	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout, metadata, metadata_len);
-	if (metadata_len > 0 && zval_metadata != NULL) {
+	if (metadata_len >= 0 && zval_metadata != NULL) {
 		zval_dtor(zval_metadata);
 		ZVAL_STRINGL(zval_metadata, metadata, metadata_len, 1);
 	}
