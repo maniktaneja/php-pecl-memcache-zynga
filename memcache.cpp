@@ -3257,6 +3257,7 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 	zend_bool use_binary = 0;
 	int retry_interval = MEMCACHE_G(retry_interval);
 	LogManager lm(logData);
+	char *version_str = NULL;
 
 	LogManager::getLogger()->setCmd("connect");
 
@@ -3290,9 +3291,12 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 		    failed = 1;
 			LogManager::getLogger()->setCode(PROXY_CONNECT_FAILED);
 		} else {
-		    failed = (mmc_get_version(mmc TSRMLS_CC) == NULL)? 1: 0;
+		    failed = ((version_str = mmc_get_version(mmc TSRMLS_CC)) == NULL)? 1: 0;
 			if (failed) {
 				LogManager::getLogger()->setCode(VERSION_FAILED);
+			}
+			if (version_str) {
+				efree(version_str);
 			}
 		}
 	}
