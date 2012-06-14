@@ -2053,7 +2053,6 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 					metadata[metadata_len] = '\0';
 				}
 				else {
-					metadata[0] = '\0';
 					metadata_len = 0;
 				}
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
