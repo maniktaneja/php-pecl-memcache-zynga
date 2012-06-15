@@ -115,6 +115,8 @@ extension=%{module_name}.so
 ; Option to enable the number of retries on a persistent connection
 ;memcache.connection_retry_count=0
 memcache.log_conf = %{log_dir}/logconf
+; Option to enable end to end Data Integrity
+memcache.data_integrity_enabled=true
 EOF
 
 # Install XML package description

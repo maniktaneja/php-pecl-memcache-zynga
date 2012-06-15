@@ -101,12 +101,13 @@ PHP_FUNCTION(memcache_setlogname);
 #define MMC_CHKSUM					(1 << 3)
 #define MMC_COMPRESSED_BZIP2		(1 << 4) 
 #define MMC_SERIALIZED_IGBINARY		(1 << 5)
+#define MMC_DI						(1 << 6)
 #define MMC_DEFAULT_TIMEOUT 10000			/* milli seconds */
 #define MMC_KEY_MAX_SIZE 250				/* stoled from memcached sources =) */
 #define MMC_DEFAULT_RETRY 15 				/* retry failed server after x seconds */
 #define MMC_DEFAULT_SAVINGS 0.2				/* minimum 20% savings for compression to be used */
 #define MMC_DEFAULT_CACHEDUMP_LIMIT	100		/* number of entries */
-#define MMC_CHKSUM_LEN    16
+#define MMC_CHKSUM_LEN    50
 #define MAX_CRC_BUF 50
 
 
@@ -128,6 +129,23 @@ PHP_FUNCTION(memcache_setlogname);
 
 #define MC_CHKSUM_MAGIC	0xbeefbaad
 
+#define DI_CHKSUM_UNSUPPORTED		0
+#define DI_CHKSUM_SUPPORTED_OFF		(1 << 0)
+#define DI_CHKSUM_CRC				(1 << 1)
+#define DI_CHKSUM_MISMATCH_PECL		(1 << 2)
+#define DI_CHKSUM_MISMATCH_MCMUX	(1 << 3)
+#define DI_CHKSUM_MISMATCH_MOXI		(1 << 4)
+#define DI_CHKSUM_MISMATCH_MB		(1 << 5)
+
+#define get_componet_name(metadata)  ((metadata & DI_CHKSUM_MISMATCH_PECL) ? "Pecl-memcache" : ((metadata & DI_CHKSUM_MISMATCH_MCMUX) ? "Mcmux" : ((metadata & DI_CHKSUM_MISMATCH_MOXI) ? ("Moxi") : ((metadata & DI_CHKSUM_MISMATCH_MB) ? ("Membase") : ("None")))))
+
+
+
+#define DI_CHKSUM_CRC_STR		"CRC"
+#define DI_CHKSUM_OFF_STR		"NONE"
+#define MAX_OPTIONS_LEN			256
+#define CRC_ENCODED_LEN			8
+
 
 typedef struct mmc {
 	php_stream				*stream;
@@ -148,6 +166,8 @@ typedef struct mmc {
 	int						errnum;					/* last error code */
 	zval					*failure_callback;
 	zend_bool				in_free;
+	zend_bool				got_options;
+	unsigned char			data_integrity_algo;
 	struct mmc				*proxy;
 	struct mmc				*next;
 } mmc_t;
@@ -160,10 +180,6 @@ typedef mmc_t * (*mmc_hash_find_server)(void *, const char *, int, zend_bool TSR
 typedef void (*mmc_hash_add_server)(void *, mmc_t *, unsigned int);
 /*wrapper over zend macro smart_str_appendl. defined in memcache_session.c*/
 void append_php_smart_string(smart_str *s, const char *src, int len);
-
-
-#define mmc_pool_find(pool, key, key_len) \
-	pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled)
 
 typedef struct mmc_hash {
 	mmc_hash_create_state	create_state;
@@ -224,6 +240,8 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	zend_bool proxy_connect_failed;
 	mmc_t * temp_proxy_list;
 	char *log_conf;
+	zend_bool data_integrity_support;
+	long integrity_error_retry_count;
     lzo_align_t __LZO_MMODEL lzo_wmem[ ((LZO1X_1_MEM_COMPRESS) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ];
 ZEND_END_MODULE_GLOBALS(memcache)
 
@@ -251,6 +269,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zva
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC); 
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
+mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len);
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
