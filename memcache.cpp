@@ -490,7 +490,7 @@ static int mmc_flush(mmc_t *, int TSRMLS_DC);
 static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC);
 static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len TSRMLS_DC);
 static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas);
-static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout);
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout,  char *metadata, int &metadata_len);
 static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
 static int mmc_incr_decr(mmc_t *, int, char *, int, int, long * , mc_logger_t * TSRMLS_DC);
@@ -1982,7 +1982,7 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
 /* }}} */
 
 
-int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas, int timeout TSRMLS_DC) /* {{{ */
+int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **return_value, zval *return_flags, zval *return_cas, int timeout , char *metadata, int &metadata_len TSRMLS_DC) /* {{{ */
 {
 	mmc_t *mmc;
 	char *command, *value;
@@ -1992,12 +1992,15 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 	MMC_DEBUG(("mmc_exec_getl_cmd: key '%s'", key));
 	LogManager::getLogger()->setKey(key);
 
-	if (timeout < 0 || timeout > 30)
+	if (timeout <= 0 || timeout > 30)
 		timeout = 15;
 
-	command_len = (timeout) ? spprintf(&command, 0, "getl %s %d", key, timeout):
-									spprintf(&command, 0, "getl %s", key);
-
+	if (metadata_len > 0) {
+		command_len = spprintf(&command, 0, "getl %s %d %s", key, timeout, metadata);
+	}
+	else {
+		command_len = spprintf(&command, 0, "getl %s %d", key, timeout);
+	}
 
 	while (result < 0 && (mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL &&
 		mmc->status != MMC_STATUS_FAILED) {
@@ -2043,6 +2046,15 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 				ZVAL_FALSE(*return_value);
 				LogManager::getLogger()->setCode(MC_LOCK_ERROR);
 				result = 0;
+				char *metadata_start = mmc->inbuf + (sizeof("LOCK_ERROR ") - 1);
+				metadata_len = strlen(mmc->inbuf) - (sizeof("LOCK_ERROR \r\n") - 1);
+				if (metadata_len > 0) {
+					memcpy(metadata, metadata_start, metadata_len);
+					metadata[metadata_len] = '\0';
+				}
+				else {
+					metadata_len = 0;
+				}
 			} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf), sizeof("NOT_FOUND")-1)) {
 				/* key doesn't exist */
 				result = 0;
@@ -3245,6 +3257,7 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 	zend_bool use_binary = 0;
 	int retry_interval = MEMCACHE_G(retry_interval);
 	LogManager lm(logData);
+	char *version_str = NULL;
 
 	LogManager::getLogger()->setCmd("connect");
 
@@ -3278,9 +3291,12 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 		    failed = 1;
 			LogManager::getLogger()->setCode(PROXY_CONNECT_FAILED);
 		} else {
-		    failed = (mmc_get_version(mmc TSRMLS_CC) == NULL)? 1: 0;
+		    failed = ((version_str = mmc_get_version(mmc TSRMLS_CC)) == NULL)? 1: 0;
 			if (failed) {
 				LogManager::getLogger()->setCode(VERSION_FAILED);
+			}
+			if (version_str) {
+				efree(version_str);
 			}
 		}
 	}
@@ -4786,20 +4802,24 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 PHP_FUNCTION(memcache_getl)
 {
 	mmc_pool_t *pool;
-	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
+	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL, *zval_metadata = NULL;
 	int timeout = 15;
+	char metadata[MAX_METADATA_LEN + 1];
+	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata. 
+								// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0 
+								// (=0 if there is a lock error but the lock has no metadata)
 
 	LogManager lm(logData);
 	LogManager::getLogger()->setCmd("getl");
 
 	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|lz",
-			&mmc_object, memcache_class_entry_ptr, &zkey, &timeout, &flags) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz|lzz",
+			&mmc_object, memcache_class_entry_ptr, &zkey, &timeout, &flags, &zval_metadata) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);
 			return;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|lz", &zkey, &timeout, &flags) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z|lzz", &zkey, &timeout, &flags, &zval_metadata) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);
 			return;
 		}
@@ -4813,7 +4833,25 @@ PHP_FUNCTION(memcache_getl)
 	LogManager::getLogger()->setLogName(pool->log_name);
 	LogManager::getLogger()->setCommandType(GET);
 
-	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout);
+	if (zval_metadata != NULL) {  
+		if (Z_TYPE_P(zval_metadata) == IS_STRING) {
+			metadata_len = Z_STRLEN_P(zval_metadata);
+			if (metadata_len > MAX_METADATA_LEN) {
+				metadata_len = MAX_METADATA_LEN;
+			}
+			memcpy(metadata, Z_STRVAL_P(zval_metadata), metadata_len);
+			metadata[metadata_len] = 0;
+		}
+		else {
+			RETURN_FALSE;
+		}
+	}
+
+	php_mmc_getl(pool, zkey, &return_value, flags, cas, timeout, metadata, metadata_len);
+	if (metadata_len >= 0 && zval_metadata != NULL) {
+		zval_dtor(zval_metadata);
+		ZVAL_STRINGL(zval_metadata, metadata, metadata_len, 1);
+	}
 }
 /* {{{ proto string memcache_findserver(object memcache, mixed key)
    Computes the hash of the key and finds the exact server in the pool to which this key will be mapped. Returns that host as a string.
@@ -4949,14 +4987,14 @@ PHP_FUNCTION(memcache_get)
 	php_mmc_get(pool, zkey, &return_value, NULL, flags, cas);
 }
 
-static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout) /* {{{ */
+static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout, char *metadata, int &metadata_len) /* {{{ */
 {
 	char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
 
 	if (Z_TYPE_P(zkey) != IS_ARRAY) {
 		if (mmc_prepare_key(zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
-			if (mmc_exec_getl_cmd(pool, key, key_len, return_value, flags, cas, timeout TSRMLS_CC) < 0) {
+			if (mmc_exec_getl_cmd(pool, key, key_len, return_value, flags, cas, timeout , metadata, metadata_len TSRMLS_CC) < 0) {
 				zval_dtor(*return_value);
 				ZVAL_FALSE(*return_value);
 			}

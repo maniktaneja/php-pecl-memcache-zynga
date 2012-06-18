@@ -108,6 +108,7 @@ PHP_FUNCTION(memcache_setlogname);
 #define MMC_DEFAULT_CACHEDUMP_LIMIT	100		/* number of entries */
 #define MMC_CHKSUM_LEN    16
 #define MAX_CRC_BUF 50
+#define MAX_METADATA_LEN	1024
 
 
 #define MMC_STATUS_FAILED 0
