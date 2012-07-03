@@ -191,6 +191,15 @@ fi
 * Tue Jul 03 2012 <vnatarajan@zynga.com> 2.4.1.18
 - Data integrity support
 
+* Fri Jun 01 2012 <nigupta@zynga.com> 2.4.1.17
+- Adding lock metadata changes
+
+* Fri Jun 01 2012 <nigupta@zynga.com> 2.4.1.16
+- Fixing bugs in pecl-memcache
+
+* Wed Apr 04 2012 <vnatarajan@zynga.com> 2.4.1.15
+- Fixing multiget and multigetByKey for slingo crash
+
 * Wed Apr 04 2012 <nigupta@zynga.com> 2.4.1.14
 - Request logging changes for pecl-memcache
 
