@@ -101,7 +101,6 @@ PHP_FUNCTION(memcache_setlogname);
 #define MMC_CHKSUM					(1 << 3)
 #define MMC_COMPRESSED_BZIP2		(1 << 4) 
 #define MMC_SERIALIZED_IGBINARY		(1 << 5)
-#define MMC_DI						(1 << 6)
 #define MMC_DEFAULT_TIMEOUT 10000			/* milli seconds */
 #define MMC_KEY_MAX_SIZE 250				/* stoled from memcached sources =) */
 #define MMC_DEFAULT_RETRY 15 				/* retry failed server after x seconds */
@@ -139,10 +138,10 @@ PHP_FUNCTION(memcache_setlogname);
 
 #define get_componet_name(metadata)  ((metadata & DI_CHKSUM_MISMATCH_PECL) ? "Pecl-memcache" : ((metadata & DI_CHKSUM_MISMATCH_MCMUX) ? "Mcmux" : ((metadata & DI_CHKSUM_MISMATCH_MOXI) ? ("Moxi") : ((metadata & DI_CHKSUM_MISMATCH_MB) ? ("Membase") : ("None")))))
 
+#define CHKSUM_MISMATCH_DETECTED		-3
 
-
-#define DI_CHKSUM_CRC_STR		"CRC"
-#define DI_CHKSUM_OFF_STR		"NONE"
+#define DI_CHKSUM_CRC_STR		"crc32"
+#define DI_CHKSUM_OFF_STR		"none"
 #define MAX_OPTIONS_LEN			256
 #define CRC_ENCODED_LEN			8
 
@@ -242,6 +241,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	char *log_conf;
 	zend_bool data_integrity_support;
 	long integrity_error_retry_count;
+	char *integrity_algo;
     lzo_align_t __LZO_MMODEL lzo_wmem[ ((LZO1X_1_MEM_COMPRESS) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ];
 ZEND_END_MODULE_GLOBALS(memcache)
 

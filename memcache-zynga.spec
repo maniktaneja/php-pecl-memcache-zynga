@@ -9,7 +9,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.4.1.14
+Version:      2.4.1.18
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -116,7 +116,9 @@ extension=%{module_name}.so
 ;memcache.connection_retry_count=0
 memcache.log_conf = %{log_dir}/logconf
 ; Option to enable end to end Data Integrity
-memcache.data_integrity_enabled=true
+; memcache.data_integrity_enabled=true
+; Option to specify the algorithm used for data integrity, allowed values: "crc32", "none"
+; memcache.integrity_algo="crc32"
 EOF
 
 # Install XML package description
@@ -185,6 +187,9 @@ fi
 
 
 %changelog
+
+* Tue Jul 03 2012 <vnatarajan@zynga.com> 2.4.1.18
+- Data integrity support
 
 * Wed Apr 04 2012 <nigupta@zynga.com> 2.4.1.14
 - Request logging changes for pecl-memcache
