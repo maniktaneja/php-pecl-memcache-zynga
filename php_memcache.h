@@ -266,7 +266,7 @@ void mmc_pool_free(mmc_pool_t * TSRMLS_DC);
 void mmc_pool_add(mmc_pool_t *, mmc_t *, unsigned int);
 int mmc_pool_store_wrapper(mmc_pool_t *, const char *, int, const char *, int, int, int, unsigned long, const char *, int, zend_bool, const char *, int ,zval *TSRMLS_DC);
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
-int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval * TSRMLS_DC);
+int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval *, int TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
 mmc_t *mmc_get_proxy(TSRMLS_D);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
