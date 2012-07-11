@@ -930,16 +930,21 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 	options_start = mmc->inbuf;
 	options_end = mmc->inbuf + response_len;
 	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1)) {
-
 		// Check for Data Integrity algorithm in the options
 		if((di_options_start = php_memnstr(options_start, "DIAlgo", 1, options_end)) != NULL) {
-			int di_options_len = options_end - di_options_start;
-			char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
-			if (di_algo != NULL && (php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 1, di_algo + di_options_len - sizeof("DIAlgo")) != NULL)) {
-				mmc->data_integrity_algo |= DI_CHKSUM_CRC;
+			// If the pool settings say checksums are off, we dont care what mcmux/MB tells us, checksums are off.
+			if (pool->enable_checksum == 0) {
+				mmc->data_integrity_algo = DI_CHKSUM_SUPPORTED_OFF;
 			}
 			else {
-				mmc->data_integrity_algo |= DI_CHKSUM_SUPPORTED_OFF;
+				int di_options_len = options_end - di_options_start;
+				char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
+				if (di_algo != NULL && (php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 1, di_algo + di_options_len - sizeof("DIAlgo")) != NULL)) {
+					mmc->data_integrity_algo |= DI_CHKSUM_CRC;
+				}
+				else {
+					mmc->data_integrity_algo |= DI_CHKSUM_SUPPORTED_OFF;
+				}
 			}
 		}
 	}
@@ -1314,13 +1319,11 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 		add_new_crc = 0;
 		calc_crc = 0;
-		if (pool->enable_checksum == 1) {
-			add_new_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || (mmc->data_integrity_algo & DI_CHKSUM_SUPPORTED_OFF);
-			// Add old style CRC (before the blob) only if data integrity is enabled but new style checksum is NOT supported (maybe because mcmux or MB is old)
-			add_old_crc = !add_new_crc && add_old_crc;
-			// We need to calculate CRC if the feature is enabled AND (new style CRC is required OR old style CRC is required)
-			calc_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || add_old_crc;
-		}
+		add_new_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || (mmc->data_integrity_algo & DI_CHKSUM_SUPPORTED_OFF);
+		// Add old style CRC (before the blob) only if data integrity is enabled but new style checksum is NOT supported (maybe because mcmux or MB is old)
+		add_old_crc = !add_new_crc && add_old_crc;
+		// We need to calculate CRC if the feature is enabled AND (new style CRC is required OR old style CRC is required)
+		calc_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || add_old_crc;
 		//compute crc of the data before compression
 		if (calc_crc) {
 			uncrc32 = mmc_hash_crc32(value, value_len); // crc of the uncompressed data
