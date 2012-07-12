@@ -928,10 +928,10 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 
 	mmc->data_integrity_algo = DI_CHKSUM_UNSUPPORTED;
 	options_start = mmc->inbuf;
-	options_end = mmc->inbuf + response_len;
+	options_end = mmc->inbuf + response_len - 2;
 	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1)) {
 		// Check for Data Integrity algorithm in the options
-		if((di_options_start = php_memnstr(options_start, "DIAlgo", 1, options_end)) != NULL) {
+		if((di_options_start = php_memnstr(options_start, "DIAlgo", sizeof("DIAlgo") -1, options_end)) != NULL) {
 			// If the pool settings say checksums are off, we dont care what mcmux/MB tells us, checksums are off.
 			if (pool->enable_checksum == 0) {
 				mmc->data_integrity_algo = DI_CHKSUM_SUPPORTED_OFF;
@@ -939,7 +939,7 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 			else {
 				int di_options_len = options_end - di_options_start;
 				char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
-				if (di_algo != NULL && (php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 1, di_algo + di_options_len - sizeof("DIAlgo")) != NULL)) {
+				if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
 					mmc->data_integrity_algo |= DI_CHKSUM_CRC;
 				}
 				else {
@@ -1352,16 +1352,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			if (data_len < value_len * (1 - pool->min_compress_savings)) {
 				value = data;
 				value_len = data_len;
-				//compute crc of the data after compression
-				// data after compression = (uncompressed data CRC + compressed data)
-				/*
-				if (calc_crc) {
-					len_crc_in_val = snprintf(crc_in_val, MAX_CRC_BUF - 1, "%x\r\n", uncrc32);
-					crc32 = mmc_hash_crc32(crc_in_val, len_crc_in_val);
-					crc32 = mmc_hash_crc32(value, value_len, crc32);
-					value_len += len_crc_in_val;
-				}
-				*/
 				crc32 = mmc_hash_crc32(value, value_len);
 			}
 			else {
@@ -1467,7 +1457,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		if (result < 0) {
 			if (result == -2) {
 				LogManager::getLogger()->setCode(DI_CHECKSUM_SET_FAILED);
-				php_printf("Data Integrity verification failed for key %s, did not set the value\n", key);
+				php_error(E_WARNING, "Data Integrity verification failed for key %s, did not set the value\n", key);
 				result = 0;		// Just to break out of the loop
 			}
 			else {
@@ -1924,7 +1914,6 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 		MMC_DEBUG(("mmc_readline:---"));
 		return response_len;
 	}
-
 	
 	mmc_server_seterror(mmc, "Failed reading line from stream", 0);
 	return -1;
@@ -2461,7 +2450,6 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 		}
 	}
 
-
 	if (!mmc) {
 		LogManager::getLogger()->setHost(PROXY_STR);
 		LogManager::getLogger()->setCode(CONNECT_FAILED);
@@ -2603,9 +2591,8 @@ static int mmc_exec_retrieval_cmd_multi(
 						- If we have a checksum mismatch error for it (and we have not exceeded the checksum error retries)
 				*/
 				if ( !i || (do_failover && !zend_hash_exists(Z_ARRVAL_PP(return_value), key, key_len +1)) || 
-						(chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash), key, key_len +1)) ) { 
-					if ((mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL && mmc->status != MMC_STATUS_FAILED) { 
-					
+						(chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash), key, key_len +1)) ) {
+					if ((mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL && mmc->status != MMC_STATUS_FAILED) {
 						if (!(mmc->outbuf.len)) {
 							append_php_smart_string(&(mmc->outbuf), pcas != NULL? "gets": "get",
 									pcas != NULL? sizeof("gets")-1: sizeof("get")-1);
@@ -2765,7 +2752,6 @@ static int mmc_exec_retrieval_cmd_multi(
 		mmc_queue_free(&serialized_key);
 		mmc_queue_free(&serialized_flags);
 		mmc_queue_free(&serialized_key_mmc);
-
 	}
 
 	mmc_free_multi(TSRMLS_C);
@@ -2949,7 +2935,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	else if (mmc->data_integrity_algo != DI_CHKSUM_UNSUPPORTED) {			// New style data integrity (checksum is part of the header)
 		// The header flag says there should be checksums, but the header doesnt have it!
 		if (chksum == NULL) {
-			php_printf("Data Integrity verification failed, no checksum in header. Key %s Host %s\n",
+			php_error(E_WARNING, "Data Integrity verification failed, no checksum in header. Key %s Host %s\n",
 				get_key(mmc->inbuf), mmc->host);
 			*value = data; *value_len = data_len;
 			LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED1);
@@ -2959,7 +2945,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		int cnt = sscanf(chksum, "%x:", &chksum_metadata);
 		// We dont get the metadata of the checksum
 		if (cnt < 1) {
-			php_printf("Data Integrity verification failed, incorrect checksum format for metadata. Chksum %s Key %s Host %s\n",
+			php_error(E_WARNING, "Data Integrity verification failed, incorrect checksum format for metadata. Chksum %s Key %s Host %s\n",
 					chksum, get_key(mmc->inbuf), mmc->host);
 			*value = data; *value_len = data_len;
 			LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED2);
@@ -2972,7 +2958,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 				int cnt = sscanf(chksum, "%x:%x:%x", &chksum_metadata, &crc_value, &uncrc_value);
 				// We dont get the 3 components of the checksum
 				if (cnt < 3) {
-					php_printf("Data Integrity verification failed, incorrect checksum format" 
+					php_error(E_WARNING, "Data Integrity verification failed, incorrect checksum format" 
 							"for compressed data. Chksum %s Key %s Host %s\n",
 							chksum, get_key(mmc->inbuf), mmc->host);
 					*value = data; *value_len = data_len;
@@ -2984,7 +2970,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 				int cnt = sscanf(chksum, "%x:%x", &chksum_metadata, &uncrc_value);
 				// We dont get the 2 components of the checksum
 				if (cnt < 2) {
-					php_printf("Data Integrity verification failed, \
+					php_error(E_WARNING, "Data Integrity verification failed, \
 							incorrect checksum format. Chksum %s Key %s Host %s\n",
 							chksum, get_key(mmc->inbuf), mmc->host);
 					*value = data; *value_len = data_len;
@@ -2994,7 +2980,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			}
 
 			if ((chksum_metadata & mmc->data_integrity_algo) == 0) {
-				php_printf("Cannot verify checksum, mismatch in checksum algorithm. " 
+				php_error(E_WARNING, "Cannot verify checksum, mismatch in checksum algorithm. " 
 						"Expected %x, value in header %x Key %s Host %s\n",
 						mmc->data_integrity_algo, chksum_metadata, get_key(mmc->inbuf), mmc->host);
 				*value = data; *value_len = data_len;
@@ -3005,7 +2991,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		unsigned int error_flags = ((DI_CHKSUM_MISMATCH_MCMUX) | (DI_CHKSUM_MISMATCH_MOXI) | (DI_CHKSUM_MISMATCH_MB));
 		if (chksum_metadata & error_flags) {
-			php_printf("Data Integrity verification failed, " 
+			php_error(E_WARNING, "Data Integrity verification failed, " 
 					"ckecksum mismatch detected downstream (in %s, integrity algo %x, checksum metadata %x)" 
 					". Key %s Host %s, header checksum %x\n",
 					get_componet_name(chksum_metadata), mmc->data_integrity_algo, chksum_metadata, 
@@ -3040,7 +3026,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			unsigned int crc = mmc_hash_crc32(hp, hp_len);
 			if (crc != crc_value) {
 				char *key = NULL;
-				php_printf("Data Integrity verification failed on compressed data. " 
+				php_error(E_WARNING, "Data Integrity verification failed on compressed data. " 
 						"Key %s Host %s, calculated crc %x crc in header %x\n",
 					get_key(mmc->inbuf), mmc->host, crc, crc_value);
 				*value = data; *value_len = data_len;
@@ -3052,7 +3038,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		if (!mmc_uncompress(&result_data, &result_len, hp, hp_len, *flags)) {
 			mmc_server_seterror(mmc, "Failed to uncompress data", 0);
 			efree(data);
-			php_printf("unable to uncompress data from server=%s", mmc->host);
+			php_error(E_WARNING, "unable to uncompress data from server=%s", mmc->host);
 			LogManager::getLogger()->setCode(UNCOMPRESS_FAILED);
 			return -2;
 		}
@@ -3061,7 +3047,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			// compute checksum of the compressed data
 			unsigned int crc = mmc_hash_crc32(result_data, result_len);
 			if (crc != uncrc_value) {
-				php_printf("Data Integrity verification failed on uncompressed data. \ 
+				php_error(E_WARNING, "Data Integrity verification failed on uncompressed data. \ 
 						Key %s Host %s, uncompressed calculated crc %x, crc in header %x \n",
 						get_key(mmc->inbuf), mmc->host, crc, uncrc_value);
 				efree(data);
@@ -3083,7 +3069,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			unsigned int crc = mmc_hash_crc32(hp, hp_len);
 			if (crc != uncrc_value) {
 				char *key = NULL;
-				php_printf("ata Integrity verification failed on data. Key %s Host %s. \ 
+				php_error(E_WARNING, "Data Integrity verification failed on data. Key %s Host %s. \ 
 						calculated crc %x, crc in header %x\n",
 						get_key(mmc->inbuf), mmc->host, crc, uncrc_value);
 				*value = data; *value_len = data_len;
@@ -5148,7 +5134,6 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 						add_assoc_long_ex(*value_array, "flag", sizeof("flag"), flags);
 						add_assoc_long_ex(*value_array, "cas", sizeof("cas"), cas);
 					}
-
 					if (free_key) {
 						efree(result_key);
 					}
