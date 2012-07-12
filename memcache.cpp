@@ -939,7 +939,8 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 			else {
 				int di_options_len = options_end - di_options_start;
 				char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
-				if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
+				if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 
+							sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
 					mmc->data_integrity_algo |= DI_CHKSUM_CRC;
 				}
 				else {
