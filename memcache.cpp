@@ -75,6 +75,11 @@ static void php_memcache_destroy_globals(zend_memcache_globals *memcache_globals
 {
 }
 
+typedef struct _strings {
+	char *data;
+	int len;
+}strings_t;
+
 mc_logger_t * LogManager::val = NULL;
 mc_logger_t *logData;
 bool RequestLogger::enabled = false;
@@ -1263,6 +1268,38 @@ static int mmc_pool_close(mmc_pool_t *pool TSRMLS_DC) /* disconnects and removes
 }
 /* }}} */
 
+static unsigned int checksum_crc32(strings_t *s, int count) /* CRC32 hash {{{ */
+{
+	unsigned int crc = ~0;
+	int i, p;
+
+	for (p=0; p<count; p++) {
+		for (i=0; i<s[p].len; i++) {
+			CRC32(crc, s[p].data[i]);
+		}
+	}
+
+  	return ~crc;
+}
+
+static inline unsigned int get_checksum_extra(const char *value, int value_len, int flags) {
+	strings_t s[2];
+	php_printf("flags = %d \n", flags);
+	// For new style crc, we also need to include the flags in the compressed checksum
+	s[0].data = (char *)&flags;
+	s[0].len = sizeof(flags);
+	s[1].data = (char *)value;
+	s[1].len = value_len;
+	return checksum_crc32(s, sizeof(s) / sizeof(s[0]));
+}
+
+static inline unsigned int get_checksum(const char *value, int value_len) {
+	strings_t s;
+	s.data = (char *)value;
+	s.len = value_len;
+	return checksum_crc32(&s, 1);
+}
+
 int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const char *key, int key_len, int flags, int expire, unsigned long &cas, const char *value, int value_len, zend_bool by_key, const char *shard_key, int shard_key_len, zval *val_len  TSRMLS_DC) /* {{{ */
 {
 	mmc_t *mmc;
@@ -1325,12 +1362,11 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		add_old_crc = !add_new_crc && add_old_crc;
 		// We need to calculate CRC if the feature is enabled AND (new style CRC is required OR old style CRC is required)
 		calc_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || add_old_crc;
-		//compute crc of the data before compression
-		if (calc_crc) {
-			uncrc32 = mmc_hash_crc32(value, value_len); // crc of the uncompressed data
-		}
-
 		MMC_DEBUG(("add_new_crc set to %d add old crc set to %d\n", add_new_crc, add_old_crc));
+
+		// For the new style checksum, we want to protect flags using the checksum. 
+		// If the data is compressed, include flags in the compressed checksum. 
+		// Else, include the flags in uncompressed checksum
 
 		if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO) || (flags & MMC_COMPRESSED_BZIP2)) {
 			unsigned long data_len;
@@ -1351,15 +1387,29 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 			/* was enough space saved to motivate uncompress processing on get */
 			if (data_len < value_len * (1 - pool->min_compress_savings)) {
+				if (calc_crc) {
+					uncrc32 = get_checksum(value, value_len);
+					// New style CRC - include the flags in the checksum
+					crc32 = (add_new_crc) ? get_checksum_extra(data, data_len, flags) : 
+								get_checksum(data, data_len);
+				}
 				value = data;
-				value_len = data_len;
-				crc32 = mmc_hash_crc32(value, value_len);
+				value_len = data_len;					
 			}
 			else {
 				flags &= ~(MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2);
 				efree(data);
 				data = NULL;
 			}
+		}
+
+		//compute crc of the uncompressed data (if not done already above)
+		if (calc_crc && uncrc32 == 0) {
+			// New style CRC - include flags in the checksum
+			if (add_new_crc)
+				uncrc32 = get_checksum_extra(value, value_len, flags); 
+			else
+				uncrc32 = get_checksum(value, value_len); 
 		}
 
 		// Calculate the crc and format it
@@ -2843,7 +2893,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	char *hp = data;
 	unsigned int crc_hdr_len = 0;
 	unsigned int hp_len = data_len;
-	bool has_chksum = false;
+	bool has_chksum = false, has_new_checksum = false;
 	int chksum_metadata;
 
 	// At the end of the two HUGE if blocks, we will have the checksum if one is present (new style or old)
@@ -2934,6 +2984,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 	}
 #undef PECL_MIN
 	else if (mmc->data_integrity_algo != DI_CHKSUM_UNSUPPORTED) {			// New style data integrity (checksum is part of the header)
+		has_new_checksum = true;
 		// The header flag says there should be checksums, but the header doesnt have it!
 		if (chksum == NULL) {
 			php_error(E_WARNING, "Data Integrity verification failed, no checksum in header. Key %s Host %s\n",
@@ -3024,7 +3075,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		if (crc_value) {
 			// compute checksum of the compressed data
-			unsigned int crc = mmc_hash_crc32(hp, hp_len);
+			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) : 
+				get_checksum(hp, hp_len);
 			if (crc != crc_value) {
 				char *key = NULL;
 				php_error(E_WARNING, "Data Integrity verification failed on compressed data. " 
@@ -3045,8 +3097,8 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		}
 
 		if (uncrc_value) {
-			// compute checksum of the compressed data
-			unsigned int crc = mmc_hash_crc32(result_data, result_len);
+			// compute checksum of the uncompressed data
+			unsigned int crc = get_checksum(result_data, result_len);
 			if (crc != uncrc_value) {
 				php_error(E_WARNING, "Data Integrity verification failed on uncompressed data. \ 
 						Key %s Host %s, uncompressed calculated crc %x, crc in header %x \n",
@@ -3066,8 +3118,9 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		unsigned long result_len = 0;
 
 		if (uncrc_value) {
-			// compute checksum of the compressed data
-			unsigned int crc = mmc_hash_crc32(hp, hp_len);
+			// compute checksum of the uncompressed data
+			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) : 
+				get_checksum(hp, hp_len);
 			if (crc != uncrc_value) {
 				char *key = NULL;
 				php_error(E_WARNING, "Data Integrity verification failed on data. Key %s Host %s. \ 
@@ -3078,7 +3131,6 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 				return CHKSUM_MISMATCH_DETECTED;
 			}
 		}
-
 
 		result_len = hp_len;
 		result_data = (char *)emalloc(result_len + 3);
