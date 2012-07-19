@@ -78,7 +78,7 @@ static void php_memcache_destroy_globals(zend_memcache_globals *memcache_globals
 typedef struct _strings {
 	char *data;
 	int len;
-}strings_t;
+} pecl_string_t;
 
 mc_logger_t * LogManager::val = NULL;
 mc_logger_t *logData;
@@ -1268,7 +1268,7 @@ static int mmc_pool_close(mmc_pool_t *pool TSRMLS_DC) /* disconnects and removes
 }
 /* }}} */
 
-static unsigned int checksum_crc32(strings_t *s, int count) /* CRC32 hash {{{ */
+static unsigned int checksum_crc32(pecl_string_t *s, int count) /* CRC32 hash {{{ */
 {
 	unsigned int crc = ~0;
 	int i, p;
@@ -1283,8 +1283,7 @@ static unsigned int checksum_crc32(strings_t *s, int count) /* CRC32 hash {{{ */
 }
 
 static inline unsigned int get_checksum_extra(const char *value, int value_len, int flags) {
-	strings_t s[2];
-	php_printf("flags = %d \n", flags);
+	pecl_string_t s[2];
 	// For new style crc, we also need to include the flags in the compressed checksum
 	s[0].data = (char *)&flags;
 	s[0].len = sizeof(flags);
@@ -1294,7 +1293,7 @@ static inline unsigned int get_checksum_extra(const char *value, int value_len, 
 }
 
 static inline unsigned int get_checksum(const char *value, int value_len) {
-	strings_t s;
+	pecl_string_t s;
 	s.data = (char *)value;
 	s.len = value_len;
 	return checksum_crc32(&s, 1);
@@ -1394,7 +1393,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 								get_checksum(data, data_len);
 				}
 				value = data;
-				value_len = data_len;					
+				value_len = data_len;
 			}
 			else {
 				flags &= ~(MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2);
@@ -1406,10 +1405,12 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		//compute crc of the uncompressed data (if not done already above)
 		if (calc_crc && uncrc32 == 0) {
 			// New style CRC - include flags in the checksum
-			if (add_new_crc)
+			if (add_new_crc) {
 				uncrc32 = get_checksum_extra(value, value_len, flags); 
-			else
+			}
+			else {
 				uncrc32 = get_checksum(value, value_len); 
+			}
 		}
 
 		// Calculate the crc and format it
