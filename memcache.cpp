@@ -752,6 +752,7 @@ mmc_t *mmc_server_new(char *host, int host_len, unsigned short port, int persist
 	mmc->timeoutms = timeout * 1000;
 	mmc->connect_timeoutms = timeout * 1000;
 	mmc->data_integrity_algo = DI_CHKSUM_UNSUPPORTED;
+	mmc->di_algo_in_use = DI_CHKSUM_UNSUPPORTED;
 	mmc->got_options = false;
 	mmc->retry_interval = retry_interval;
 
@@ -934,24 +935,17 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 	mmc->data_integrity_algo = DI_CHKSUM_UNSUPPORTED;
 	options_start = mmc->inbuf;
 	options_end = mmc->inbuf + response_len - 2;
-	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1)) {
-		// Check for Data Integrity algorithm in the options
-		if((di_options_start = php_memnstr(options_start, "DIAlgo", sizeof("DIAlgo") -1, options_end)) != NULL) {
-			// If the pool settings say checksums are off, we dont care what mcmux/MB tells us, checksums are off.
-			if (pool->enable_checksum == 0) {
-				mmc->data_integrity_algo = DI_CHKSUM_SUPPORTED_OFF;
-			}
-			else {
-				int di_options_len = options_end - di_options_start;
-				char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
-				if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 
-							sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
-					mmc->data_integrity_algo |= DI_CHKSUM_CRC;
-				}
-				else {
-					mmc->data_integrity_algo |= DI_CHKSUM_SUPPORTED_OFF;
-				}
-			}
+	// Check for Data Integrity algorithm in the options
+	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1) && 
+		(di_options_start = php_memnstr(options_start, "DIAlgo", sizeof("DIAlgo") -1, options_end)) != NULL) {
+		int di_options_len = options_end - di_options_start;
+		char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
+		if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 
+					sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
+			mmc->data_integrity_algo |= DI_CHKSUM_CRC;
+		}
+		else {
+			mmc->data_integrity_algo |= DI_CHKSUM_SUPPORTED_OFF;
 		}
 	}
 
@@ -963,6 +957,10 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 	if (mmc == NULL || mmc->status == MMC_STATUS_FAILED || (pool->proxy_enabled && mmc->proxy == NULL)) 
 		return mmc;
 
+	// Why chek for proxy->got_options here? we (usually) only have a single connection to the
+	// proxy that gets used to talk to all Membases. But in multiget, we open a separate connection
+	// to the proxy for each key. We want to send options command on every one of these
+	// connections (so that mcmux knows pecl understands checksums).
 	if(mmc->got_options == false || (pool->proxy_enabled && mmc->proxy->got_options == false)) {
 		if (get_options(pool, mmc) >= 0) {
 			mmc->got_options = true;
@@ -973,6 +971,22 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 			mmc_server_failure(mmc TSRMLS_CC);
 		}
 	}
+
+	if (pool->enable_checksum != 0) {
+		mmc->di_algo_in_use = mmc->data_integrity_algo;
+	}
+	else {	
+		// The pool settings say checksum are off, the final settings will be OFF or unsupported, 
+		// depending on what the downstream says
+		if (mmc->data_integrity_algo == DI_CHKSUM_UNSUPPORTED) {
+			mmc->di_algo_in_use = DI_CHKSUM_UNSUPPORTED;
+		}
+		else {
+			mmc->di_algo_in_use = DI_CHKSUM_SUPPORTED_OFF;
+		}
+	}
+	MMC_DEBUG(("Pool says checksums = %d, downstream says %d final answer %d \n", pool->enable_checksum, 
+		mmc->data_integrity_algo, mmc->di_algo_in_use));
 	return mmc;
 }
 
@@ -1356,11 +1370,11 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 		add_new_crc = 0;
 		calc_crc = 0;
-		add_new_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || (mmc->data_integrity_algo & DI_CHKSUM_SUPPORTED_OFF);
+		add_new_crc = (mmc->di_algo_in_use & DI_CHKSUM_CRC) || (mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF);
 		// Add old style CRC (before the blob) only if data integrity is enabled but new style checksum is NOT supported (maybe because mcmux or MB is old)
 		add_old_crc = !add_new_crc && add_old_crc;
 		// We need to calculate CRC if the feature is enabled AND (new style CRC is required OR old style CRC is required)
-		calc_crc = (mmc->data_integrity_algo & DI_CHKSUM_CRC) || add_old_crc;
+		calc_crc = (mmc->di_algo_in_use & DI_CHKSUM_CRC) || add_old_crc;
 		MMC_DEBUG(("add_new_crc set to %d add old crc set to %d\n", add_new_crc, add_old_crc));
 
 		// For the new style checksum, we want to protect flags using the checksum. 
@@ -1415,8 +1429,8 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 
 		// Calculate the crc and format it
 		if (add_new_crc) {
-			int chksum_metadata = mmc->data_integrity_algo;
-			if (mmc->data_integrity_algo & DI_CHKSUM_SUPPORTED_OFF) {
+			int chksum_metadata = mmc->di_algo_in_use;
+			if (mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF) {
 				len_crc_in_hdr = snprintf(crc_in_hdr, MAX_CRC_BUF,  "%.4x:", chksum_metadata);
 			}
 			else if (crc32)  {
@@ -2089,7 +2103,7 @@ static int mmc_parse_response(mmc_t *mmc, char *response, int response_len, char
 	}
 
 	// We expect a checksum in the header
-	if (mmc->data_integrity_algo != DI_CHKSUM_UNSUPPORTED) {
+	if (mmc->di_algo_in_use != DI_CHKSUM_UNSUPPORTED) {
 		nspaces++;
 	}
 
@@ -2127,7 +2141,7 @@ static int mmc_parse_response(mmc_t *mmc, char *response, int response_len, char
 
 	*flags = atoi(response + spaces[1]);
 	*value_len = atoi(response + spaces[2]);
-	if (mmc->data_integrity_algo != DI_CHKSUM_UNSUPPORTED) {
+	if (mmc->di_algo_in_use != DI_CHKSUM_UNSUPPORTED) {
 		*chksum = response + spaces[3] + 1;
 		if (nspaces == 5) {
 			*cas = strtoul(response + spaces[4], NULL, 10);
@@ -2984,7 +2998,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		has_chksum = true;
 	}
 #undef PECL_MIN
-	else if (mmc->data_integrity_algo != DI_CHKSUM_UNSUPPORTED) {			// New style data integrity (checksum is part of the header)
+	else if (mmc->di_algo_in_use != DI_CHKSUM_UNSUPPORTED) {			// New style data integrity (checksum is part of the header)
 		has_new_checksum = true;
 		// The header flag says there should be checksums, but the header doesnt have it!
 		if (chksum == NULL) {
@@ -3005,7 +3019,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			return CHKSUM_MISMATCH_DETECTED;
 		}
 
-		if ((mmc->data_integrity_algo & DI_CHKSUM_SUPPORTED_OFF) == 0 && 
+		if ((mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF) == 0 && 
 				(chksum_metadata & DI_CHKSUM_SUPPORTED_OFF) == 0) {
 			if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2)) {
 				int cnt = sscanf(chksum, "%x:%x:%x", &chksum_metadata, &crc_value, &uncrc_value);
@@ -3032,10 +3046,10 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 				}
 			}
 
-			if ((chksum_metadata & mmc->data_integrity_algo) == 0) {
+			if ((chksum_metadata & mmc->di_algo_in_use) == 0) {
 				php_error(E_WARNING, "Cannot verify checksum, mismatch in checksum algorithm. " 
 						"Expected %x, value in header %x Key %s Host %s\n",
-						mmc->data_integrity_algo, chksum_metadata, get_key(mmc->inbuf), mmc->host);
+						mmc->di_algo_in_use, chksum_metadata, get_key(mmc->inbuf), mmc->host);
 				*value = data; *value_len = data_len;
 				LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED4);
 				return CHKSUM_MISMATCH_DETECTED;
@@ -3047,7 +3061,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			php_error(E_WARNING, "Data Integrity verification failed, " 
 					"ckecksum mismatch detected downstream (in %s, integrity algo %x, checksum metadata %x)" 
 					". Key %s Host %s, header checksum %x\n",
-					get_componet_name(chksum_metadata), mmc->data_integrity_algo, chksum_metadata, 
+					get_componet_name(chksum_metadata), mmc->di_algo_in_use, chksum_metadata, 
 					get_key(mmc->inbuf), mmc->host, uncrc_value);
 			*value = data; *value_len = data_len;
 			switch (chksum_metadata & error_flags) {
