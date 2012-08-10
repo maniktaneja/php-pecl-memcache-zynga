@@ -141,10 +141,6 @@ mmc_t *mmc_consistent_find_server(void *s, const char *key, int key_len, zend_bo
 	mmc_consistent_state_t *state = s;
 	mmc_t *mmc, *proxy = NULL;
 
-    if (use_proxy) {
-        proxy = mmc_get_proxy(TSRMLS_C);
-        if (proxy == NULL) return NULL;
-    }
 
 	if (state->num_servers > 1) {
 		unsigned int i, hash = state->hash(key, key_len);
@@ -154,6 +150,11 @@ mmc_t *mmc_consistent_find_server(void *s, const char *key, int key_len, zend_bo
 		}
 
 		mmc = state->buckets[hash % MMC_CONSISTENT_BUCKETS];
+
+		if (use_proxy) {
+			proxy = mmc_get_proxy(mmc TSRMLS_C);
+			if (proxy == NULL) return NULL;
+		}
 
 		/* perform failover if needed */
 		for (i=0; should_failover(mmc, proxy TSRMLS_CC) && MEMCACHE_G(allow_failover) && i<MEMCACHE_G(max_failover_attempts); i++) {
@@ -169,6 +170,11 @@ mmc_t *mmc_consistent_find_server(void *s, const char *key, int key_len, zend_bo
 	}
 	else {
 		mmc = state->points[0].server;
+		if (use_proxy) {
+			proxy = mmc_get_proxy(mmc TSRMLS_C);
+			if (proxy == NULL) return NULL;
+		}
+
         if (proxy == NULL) {
 		    mmc_open(mmc, 0, NULL, NULL TSRMLS_CC);
         } else {

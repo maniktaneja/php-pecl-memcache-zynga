@@ -34,6 +34,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <zlib.h>
+#include <map>
+#include <string>
 
 #ifdef HAVE_BZ2
 #include <bzlib.h>
@@ -84,6 +86,8 @@ mc_logger_t * LogManager::val = NULL;
 mc_logger_t *logData;
 bool RequestLogger::enabled = false;
 RequestLogger *RequestLogger::m_instance = NULL;
+
+std::map<std::string, mmc_t *> temp_multiget_proxy_mmc;
 
 ZEND_DECLARE_MODULE_GLOBALS(memcache)
 
@@ -984,7 +988,7 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 		else {
 			mmc->di_algo_in_use = DI_CHKSUM_SUPPORTED_OFF;
 		}
-	}
+	}	
 	MMC_DEBUG(("Pool says checksums = %d, downstream says %d final answer %d \n", pool->enable_checksum, 
 		mmc->data_integrity_algo, mmc->di_algo_in_use));
 	return mmc;
@@ -3115,7 +3119,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			// compute checksum of the uncompressed data
 			unsigned int crc = get_checksum(result_data, result_len);
 			if (crc != uncrc_value) {
-				php_error(E_WARNING, "Data Integrity verification failed on uncompressed data. \ 
+				php_error(E_WARNING, "Data Integrity verification failed on uncompressed data. \
 						Key %s Host %s, uncompressed calculated crc %x, crc in header %x \n",
 						get_key(mmc->inbuf), mmc->host, crc, uncrc_value);
 				efree(data);
@@ -3138,7 +3142,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 				get_checksum(hp, hp_len);
 			if (crc != uncrc_value) {
 				char *key = NULL;
-				php_error(E_WARNING, "Data Integrity verification failed on data. Key %s Host %s. \ 
+				php_error(E_WARNING, "Data Integrity verification failed on data. Key %s Host %s. \
 						calculated crc %x, crc in header %x\n",
 						get_key(mmc->inbuf), mmc->host, crc, uncrc_value);
 				*value = data; *value_len = data_len;
@@ -3701,7 +3705,7 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 
 	failed = 0;
 	if (MEMCACHE_G(proxy_enabled)) {
-		mmc->proxy = mmc_get_proxy(TSRMLS_C);
+		mmc->proxy = mmc_get_proxy(mmc TSRMLS_C);
 		if (mmc->proxy == NULL) {
 		    failed = 1;
 			LogManager::getLogger()->setCode(PROXY_CONNECT_FAILED);
@@ -3780,29 +3784,72 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 static void mmc_init_multi(TSRMLS_D)
 {
 	MEMCACHE_G(in_multi) = 1;
-	MEMCACHE_G(temp_proxy_list) = NULL;
 }
 
 static void mmc_free_multi(TSRMLS_D)
 {
-	mmc_t *mmc = MEMCACHE_G(temp_proxy_list);
-	while (mmc != NULL) {
-		mmc_t *tmp = mmc->next;
+	std::map<std::string, mmc_t*>::iterator itr = temp_multiget_proxy_mmc.begin();
+	while (itr != temp_multiget_proxy_mmc.end()) {
+		mmc_t *mmc = itr->second;
 		mmc_server_free(mmc TSRMLS_CC);
-		mmc = tmp;
+		temp_multiget_proxy_mmc.erase(itr++);
 	}
 
-	MEMCACHE_G(temp_proxy_list) = NULL;
 	MEMCACHE_G(in_multi) = 0;
 }
 
-mmc_t *mmc_get_proxy(TSRMLS_D) /* {{{ */
+
+mmc_t* get_proxy_for_multi(mmc_t *mmc TSRMLS_DC)
+{
+	char *host = MEMCACHE_G(proxy_host);
+	long port = MEMCACHE_G(proxy_port);
+	int host_len = MEMCACHE_G(proxy_hostlen);
+	mmc_t *proxy_mmc;
+	char *error_string = NULL;
+	int errnum = 0;
+	int timeout = 1000;
+	std::map<std::string, mmc_t*>::iterator itr;
+	std::string skey;
+
+	if (MEMCACHE_G(proxy_connect_failed) || !mmc) {
+		return NULL;
+	}
+
+	skey.assign(mmc->proxy_str);
+	itr = temp_multiget_proxy_mmc.find(skey);
+
+	if(itr != temp_multiget_proxy_mmc.end()) {
+		return itr->second;
+	}
+
+	proxy_mmc = mmc_server_new(host, host_len, port, 0, timeout, 0, 0 TSRMLS_CC);
+
+   if (!mmc_open(proxy_mmc, 1, &error_string, &errnum TSRMLS_CC)) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't connect to mc proxy: %s:%ld, %s (%d)", host, port, error_string ? error_string : "Unknown error", errnum);
+		mmc_server_sleep(proxy_mmc TSRMLS_CC);
+
+		if (error_string) {
+		   efree(error_string);
+		}
+
+	   MEMCACHE_G(proxy_connect_failed) = 1;
+	   mmc_server_free(proxy_mmc TSRMLS_CC);
+	   proxy_mmc = NULL;
+	}
+	else {
+		temp_multiget_proxy_mmc[skey] = proxy_mmc;
+	}
+
+	return proxy_mmc;
+}
+
+mmc_t *mmc_get_proxy(mmc_t *mmc TSRMLS_DC) /* {{{ */
 {
 	char *host, *error_string = NULL;
 	int host_len, timeout = 1000;
 	long port;
 	int errnum = 0;
-	mmc_t *mmc;
+	mmc_t *proxy_mmc;
 
 	host = MEMCACHE_G(proxy_host);
 	port = MEMCACHE_G(proxy_port);
@@ -3811,31 +3858,23 @@ mmc_t *mmc_get_proxy(TSRMLS_D) /* {{{ */
 	if (!host) return NULL;
 
 	if (MEMCACHE_G(in_multi)) {
-		if (MEMCACHE_G(proxy_connect_failed)) {
-			return NULL;
-		}
-		mmc = mmc_server_new(host, host_len, port, 0, timeout, 0, 0 TSRMLS_CC);
-		mmc->next = MEMCACHE_G(temp_proxy_list);
-		MEMCACHE_G(temp_proxy_list) = mmc;
-	} else {
-		mmc = mmc_find_persistent(host, host_len, port, timeout, 0, 0 TSRMLS_CC);
-	}
+		return get_proxy_for_multi(mmc TSRMLS_DC);
+	} 
 
-   if (!mmc_open(mmc, 1, &error_string, &errnum TSRMLS_CC)) {
+	proxy_mmc = mmc_find_persistent(host, host_len, port, timeout, 0, 0 TSRMLS_CC);
+
+   if (!mmc_open(proxy_mmc, 1, &error_string, &errnum TSRMLS_CC)) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can't connect to mc proxy: %s:%ld, %s (%d)", host, port, error_string ? error_string : "Unknown error", errnum);
-		mmc_server_sleep(mmc TSRMLS_CC);
+		mmc_server_sleep(proxy_mmc TSRMLS_CC);
 
 		if (error_string) {
 		   efree(error_string);
 		}
 
-		mmc = NULL;
-		if (MEMCACHE_G(in_multi)) {
-		   MEMCACHE_G(proxy_connect_failed) = 1;
-		}
+		proxy_mmc = NULL;
    }
 
-   return mmc;
+   return proxy_mmc;
 }
 /* }}} */
 
@@ -4191,7 +4230,7 @@ PHP_FUNCTION(memcache_get_version)
 	for (i=0; i<pool->num_servers; i++) {
 
 		if (MEMCACHE_G(proxy_enabled)) {
-			pool->servers[i]->proxy = mmc_get_proxy(TSRMLS_C);
+			pool->servers[i]->proxy = mmc_get_proxy(pool->servers[i] TSRMLS_C);
 		}
 
 		if (mmc_open(pool->servers[i], 1, NULL, NULL TSRMLS_CC)) {
@@ -5039,6 +5078,8 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 
 	key_hash = Z_ARRVAL_P(zkey_array);
 
+	mmc_init_multi(TSRMLS_C);
+
 	do
 	{
 		result_status = 0, num_requests = 0;
@@ -5257,6 +5298,8 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 		mmc_queue_free(&serialized_flags);
 		mmc_queue_free(&serialized_key_mmc);
 	}
+
+	mmc_free_multi(TSRMLS_C);
 
 	MMC_DEBUG(("php_mmc_get_multi_by_key: Exit"));
 }
@@ -5951,7 +5994,7 @@ PHP_FUNCTION(memcache_get_extended_stats)
 		hostname_len = spprintf(&hostname, 0, "%s:%d", pool->servers[i]->host, pool->servers[i]->port);
 
 		if (MEMCACHE_G(proxy_enabled)) {
-			pool->servers[i]->proxy = mmc_get_proxy(TSRMLS_C);
+			pool->servers[i]->proxy = mmc_get_proxy(pool->servers[i] TSRMLS_C);
 		}
 
 		if (mmc_open(pool->servers[i], 1, NULL, NULL TSRMLS_CC)) {

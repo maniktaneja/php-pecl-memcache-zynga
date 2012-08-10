@@ -241,7 +241,6 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	int retry_interval;
 	zend_bool in_multi;
 	zend_bool proxy_connect_failed;
-	mmc_t * temp_proxy_list;
 	char *log_conf;
 	zend_bool data_integrity_support;
 	long integrity_error_retry_count;
@@ -271,13 +270,14 @@ int mmc_pool_store_wrapper(mmc_pool_t *, const char *, int, const char *, int, i
 int mmc_open(mmc_t *, int, char **, int * TSRMLS_DC);
 int mmc_exec_retrieval_cmd(mmc_pool_t *, const char *, int, zval **, zval *, zval *, int TSRMLS_DC);
 int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
-mmc_t *mmc_get_proxy(TSRMLS_D);
+mmc_t *mmc_get_proxy(mmc_t *TSRMLS_DC);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len);
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048
 #define PROXY_STR "proxy"
+#define MAX_HOSTNAME_LEN	1024
 
 /* session handler struct */
 #if HAVE_MEMCACHE_SESSION
