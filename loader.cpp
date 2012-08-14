@@ -3,11 +3,13 @@
 #include"parser.h"
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stack>
 
 #define DEFAULT_APACHE_LOG_NAME "apacheRequestLog"
 
 std::string errorString;
 static mc_logger_t record; 
+std::stack<mc_logger *> loggerStack;
 
 bool LogManager::statConfigNotChanged(char *file) {
     static struct stat fileStat;
