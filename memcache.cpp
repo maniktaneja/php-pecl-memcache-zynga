@@ -494,7 +494,7 @@ static int mmc_compress(char **, unsigned long *, const char *, int, int TSRMLS_
 static int mmc_uncompress(char **, unsigned long *, const char *, int, int);
 static int mmc_get_pool(zval *, mmc_pool_t ** TSRMLS_DC);
 static int mmc_readline(mmc_t * TSRMLS_DC);
-char * mmc_get_version(mmc_t * TSRMLS_DC);
+static char * mmc_get_version(mmc_t * TSRMLS_DC);
 static int mmc_str_left(char *, char *, int, int);
 static int mmc_sendcmd(mmc_t *, const char *, int TSRMLS_DC);
 static int mmc_parse_response(mmc_t *mmc, char *, int, char **, int *, int *, unsigned long *, int *);
@@ -1774,7 +1774,7 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 #define VERSION_ERR_STR_S sizeof(VERSION_ERR_STR)-1
 #define MAX_ERR_STR_LEN 256
 
-char *mmc_get_version(mmc_t *mmc TSRMLS_DC) /* {{{ */
+static char *mmc_get_version(mmc_t *mmc TSRMLS_DC) /* {{{ */
 {
 	char *version_str;
 	int response_len;
@@ -2524,22 +2524,14 @@ static int mmc_exec_retrieval_cmd_multi(
 }
 /* }}} */
 
-
-char *get_key(char *inbuf)
+static char *get_key(char *inbuf)
 {
 	char *key = NULL;
 	int i = 0;
-
-	key = (char *)emalloc(1024);
-
-	bzero(key, 1024);
-
-	while(*inbuf++  != 0x20); //skip whitespace
-
-	while(*inbuf != 0x20 && i < 1024 && *inbuf != '\n') {
-		*(key + i++) = *inbuf++;
-	}
-
+	while(*inbuf++  != ' '); //skip VALUE string
+	key = inbuf;
+	while(*++inbuf != ' ' && i++ < 1024 && *inbuf != '\n');
+	*inbuf = 0;
 	return key;
 }
 
