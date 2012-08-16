@@ -3564,7 +3564,6 @@ PHP_FUNCTION(memcache_set_server_params)
 	char *host;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("setserverparams");
 
@@ -3660,7 +3659,6 @@ PHP_FUNCTION(memcache_get_server_status)
 	char *host;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("getserverstatus");
 
@@ -3773,7 +3771,6 @@ PHP_FUNCTION(memcache_get_version)
 	zval *mmc_object = getThis();
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("version");
 
@@ -3825,7 +3822,6 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	zval *val_len = 0, *zval_cas = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 	char bykey_cmd[MMC_KEY_MAX_SIZE];
 
 	if (mmc_object == NULL) {
@@ -4540,7 +4536,6 @@ PHP_FUNCTION(memcache_getMultiByKey) {
 	zval *mmc_object = getThis();
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz", &mmc_object, memcache_class_entry_ptr, &zkey_array) == FAILURE) {
@@ -4895,7 +4890,6 @@ PHP_FUNCTION(memcache_findserver)
     mmc_t *mmc;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("findserver");
 
@@ -4958,7 +4952,6 @@ PHP_FUNCTION(memcache_unlock)
 	mmc_pool_t *pool;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("unlock");
 
@@ -5121,7 +5114,6 @@ PHP_FUNCTION(memcache_delete)
 	unsigned int key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("delete");
 
@@ -5196,7 +5188,6 @@ PHP_FUNCTION(memcache_deleteByKey) {
 	unsigned int shard_key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("deleteByKey");
 
@@ -5352,7 +5343,6 @@ static void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int 
 	int key_array_count = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -5867,7 +5857,6 @@ PHP_FUNCTION(memcache_flush)
 	long timestamp = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("flush");
 
@@ -5924,7 +5913,6 @@ PHP_FUNCTION(memcache_setproperty)
 	int prop_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("setproperty");
 
@@ -5987,7 +5975,6 @@ PHP_FUNCTION(memcache_enable_proxy)
 	zend_bool onoff;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("enableproxy");
 
@@ -6029,7 +6016,6 @@ PHP_FUNCTION(memcache_setoptimeout)
 	long timeoutms = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("settimeout");
 
@@ -6077,7 +6063,6 @@ PHP_FUNCTION(memcache_setlogname)
 	int log_name_len = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
 
 	LogManager::getLogger()->setCmd("setlogname");
 
