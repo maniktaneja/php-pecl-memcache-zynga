@@ -83,7 +83,6 @@ typedef struct _strings {
 } pecl_string_t;
 
 mc_logger_t * LogManager::val = NULL;
-mc_logger_t *logData;
 bool RequestLogger::enabled = false;
 RequestLogger *RequestLogger::m_instance = NULL;
 
@@ -153,6 +152,21 @@ ZEND_BEGIN_ARG_INFO(memcache_cas_arginfo, 0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
 ZEND_BEGIN_ARG_INFO(memcache_cas_arginfo1, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(1)
+ZEND_END_ARG_INFO();
+ZEND_BEGIN_ARG_INFO(memcache_cas_arginfo3, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(1)
+ZEND_END_ARG_INFO();
+ZEND_BEGIN_ARG_INFO(memcache_cas_arginfo4, 0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
+	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(0)
 	ZEND_ARG_PASS_INFO(1)
 ZEND_END_ARG_INFO();
@@ -233,9 +247,9 @@ zend_function_entry memcache_functions[] = {
 	PHP_FE(memcache_unlock,			memcache_unlock_arginfo)
 	PHP_FE(memcache_getByKey,		memcache_getByKey_arginfo)
 	PHP_FE(memcache_getMultiByKey,	NULL)
-	PHP_FE(memcache_casByKey,		NULL)
+	PHP_FE(memcache_casByKey,		memcache_cas_arginfo3)
 	PHP_FE(memcache_casMultiByKey,	memcache_cas_arginfo)
-	PHP_FE(memcache_cas,			NULL)
+	PHP_FE(memcache_cas,			memcache_cas_arginfo3)
 	PHP_FE(memcache_delete,			NULL)
 	PHP_FE(memcache_deleteByKey,	NULL)
 	PHP_FE(memcache_deleteMultiByKey, NULL)
@@ -283,9 +297,9 @@ static zend_function_entry php_memcache_class_functions[] = {
 	PHP_FALIAS(unlock,			memcache_unlock,			memcache_unlock_arginfo1)
 	PHP_FALIAS(getByKey,		memcache_getByKey,			getByKey_arginfo)
 	PHP_FALIAS(getMultiByKey,	memcache_getMultiByKey,	    NULL)
-	PHP_FALIAS(casByKey,		memcache_casByKey,			NULL)
+	PHP_FALIAS(casByKey,		memcache_casByKey,			memcache_cas_arginfo4)
 	PHP_FALIAS(casMultiByKey,	memcache_casMultiByKey,		memcache_cas_arginfo1)
-	PHP_FALIAS(cas,				memcache_cas,				NULL)
+	PHP_FALIAS(cas,				memcache_cas,				memcache_cas_arginfo4)
 	PHP_FALIAS(delete,			memcache_delete,			NULL)
 	PHP_FALIAS(deleteByKey,		memcache_deleteByKey,		NULL)
 	PHP_FALIAS(deleteMultiByKey,memcache_deleteMultiByKey,	NULL)
@@ -532,7 +546,7 @@ static int mmc_read_value(mmc_t *, char **, int *, char **, int *, int *, unsign
 static int mmc_flush(mmc_t *, int TSRMLS_DC);
 static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len, zend_bool by_key TSRMLS_DC);
 static void php_handle_multi_store_command(INTERNAL_FUNCTION_PARAMETERS, char * command, int command_len TSRMLS_DC);
-static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas, bool return_corrupted);
+static void php_mmc_get(mmc_pool_t *pool, zval *zkey, char *key, zval **return_value, zval **status_array, zval *flags, zval *cas, bool return_corrupted);
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout,  char *metadata, int &metadata_len);
 static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTERNAL_FUNCTION_PARAMETERS);
 static int mmc_get_stats(mmc_t *, char *, int, int, zval * TSRMLS_DC);
@@ -541,7 +555,7 @@ static void php_mmc_incr_decr(mmc_pool_t *pool, char *key, int key_len, char *sh
 static void php_mmc_connect(INTERNAL_FUNCTION_PARAMETERS, int);
 static void mmc_init_multi(TSRMLS_D);
 static void mmc_free_multi(TSRMLS_D);
-static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags, zval *return_cas TSRMLS_DC);
+static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, char *key, zval *zshardKey, zval *zvalue, zval *return_flags, zval *return_cas TSRMLS_DC);
 static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **return_value TSRMLS_DC);
 static void php_mmc_store_multi_by_key(zval * mmc_object, zval *zkey_array, char *command, int command_len, zval **return_value, zval **val_len TSRMLS_DC);
 static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value, int flags, int expire, unsigned long &cas, char *shard_key, int shard_key_len, char *command, int command_len, zend_bool by_key, zval *val_len);
@@ -612,7 +626,6 @@ PHP_MINIT_FUNCTION(memcache)
 	REGISTER_LONG_CONSTANT("MEMCACHE_HAVE_SESSION", 0, CONST_CS | CONST_PERSISTENT);
 #endif
 	memcache_lzo_enabled = (lzo_init() == LZO_E_OK)? 1: 0;
-	logData = new mc_logger();
 	return SUCCESS;
 }
 /* }}} */
@@ -2182,6 +2195,7 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
  		php_unserialize_data_t var_hash;
  		PHP_VAR_UNSERIALIZE_INIT(var_hash);
 		LogManager::getLogger()->startSerialTime();
+		LogManager::saveLogger();
  		if (!php_var_unserialize(return_value, (const unsigned char **)&value_tmp, (const unsigned char *)(value_tmp + value_len), &var_hash TSRMLS_CC)) {
 
  			if (!MEMCACHE_G(debug_mode)) {
@@ -2195,12 +2209,14 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
  				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to unserialize data for key=%s, server=%s, raw value returned as zval string", key, host);
  			}
  		}
+		LogManager::restoreLogger();
 		LogManager::getLogger()->stopSerialTime();
  		PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
 
  	} else if(flags & MMC_SERIALIZED_IGBINARY) {
  	#ifdef HAVE_MEMCACHE_IGBINARY
 		LogManager::getLogger()->startSerialTime();
+		LogManager::saveLogger();
  		/* igbinary functions return 0 on success */
  		if( igbinary_unserialize((uint8_t *)value, value_len, return_value TSRMLS_CC) != 0 ) {
 
@@ -2214,6 +2230,7 @@ static int mmc_postprocess_value(const char* key, int flags, const char* host, z
  				php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to igbinary_unserialize data for key=%s, server=%s, raw value returned as zval string", key, host);
  			}
  		}
+		LogManager::restoreLogger();
 		LogManager::getLogger()->stopSerialTime();
  	#else
  		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Missing igbinary support (key=%s)", key);
@@ -2830,24 +2847,14 @@ static int mmc_exec_retrieval_cmd_multi(
 }
 /* }}} */
 
-
 static char *get_key(char *inbuf)
 {
-	static char *key = NULL;
+	char *key = NULL;
 	int i = 0;
-
-	if (key == NULL) {
-		key = (char *)emalloc(1024);
-	}
-
-	bzero(key, 1024);
-
-	while(*inbuf++  != 0x20); //skip whitespace
-
-	while(*inbuf != 0x20 && i < 1024 && *inbuf != '\n') {
-		*(key + i++) = *inbuf++;
-	}
-
+	while(*inbuf++  != ' '); //skip VALUE string
+	key = inbuf;
+	while(*++inbuf != ' ' && i++ < 1024 && *inbuf != '\n');
+	*inbuf = 0;
 	return key;
 }
 
@@ -3492,7 +3499,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 {
 	mmc_pool_t *pool;
 	int result;
-	static char key_tmp[MMC_KEY_MAX_SIZE];
+	char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
 	char shard_key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int shard_key_tmp_len = 0;
@@ -3514,7 +3521,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 		return 0;
 	}
 
-	LogManager::getLogger()->setKey(key_tmp);
+	LogManager::getLogger()->setKey(key);
 
 	if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
 		LogManager::getLogger()->setCode(POOL_NT_FOUND);
@@ -3575,6 +3582,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
 			value_copy_ptr = &value_copy;
 
 			LogManager::getLogger()->startSerialTime();
+			LogManager::saveLogger();
 
  			if(flags & MMC_SERIALIZED_IGBINARY) {
  			#ifdef HAVE_MEMCACHE_IGBINARY
@@ -3605,6 +3613,7 @@ static int php_mmc_store(zval * mmc_object, char *key, int key_len, zval *value,
  				flags |= MMC_SERIALIZED;
  			}
 
+			LogManager::restoreLogger();
 			LogManager::getLogger()->stopSerialTime();
 
 			zval_dtor(&value_copy);
@@ -3675,7 +3684,8 @@ static void php_mmc_connect (INTERNAL_FUNCTION_PARAMETERS, int persistent) /* {{
 	long port = MEMCACHE_G(default_port), timeout = MEMCACHE_G(default_timeout_ms) / 1000, timeoutms = 0;
 	zend_bool use_binary = 0;
 	int retry_interval = MEMCACHE_G(retry_interval);
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 	char *version_str = NULL;
 
 	LogManager::getLogger()->setCmd("connect");
@@ -3911,7 +3921,9 @@ PHP_FUNCTION(memcache_add_server)
 	int resource_type, host_len, list_id;
 	char *host;
 	zend_bool use_binary = 0;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("addServer");
 
 	if (mmc_object) {
@@ -4004,7 +4016,8 @@ PHP_FUNCTION(memcache_set_server_params)
 	zend_bool status = 1;
 	int host_len, i;
 	char *host;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("setserverparams");
 
@@ -4098,7 +4111,8 @@ PHP_FUNCTION(memcache_get_server_status)
 	long port = MEMCACHE_G(default_port);
 	int host_len, i;
 	char *host;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("getserverstatus");
 
@@ -4209,7 +4223,8 @@ PHP_FUNCTION(memcache_get_version)
 	char *version;
 	int i;
 	zval *mmc_object = getThis();
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("version");
 
@@ -4259,12 +4274,12 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	long expire = 0;
 	unsigned long cas = 0;
 	zval *val_len = 0, *zval_cas = 0;
-	LogManager lm(logData);
-	static char *bykey_cmd = NULL;
-	static int bykey_cmd_len = 0;
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	char bykey_cmd[MMC_KEY_MAX_SIZE];
 
 	if (mmc_object == NULL) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|lllsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &zval_cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Osz|llzsz", &mmc_object, memcache_class_entry_ptr, &key, &key_len, &value, &flag, &expire, &zval_cas, &shard_key, &shard_key_len, &val_len) == FAILURE) {
 			LogManager::getLogger()->setCode(PARSE_ERROR);
 			return;
 		}
@@ -4276,7 +4291,6 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	}
 
 	if (by_key) {
-		static char bykey_cmd[MMC_KEY_MAX_SIZE];
 		strncpy(bykey_cmd, command, command_len);
 		strncpy(bykey_cmd + command_len, "ByKey", sizeof("ByKey"));
 		LogManager::getLogger()->setCmd(bykey_cmd);
@@ -4310,7 +4324,7 @@ static void php_handle_store_command(INTERNAL_FUNCTION_PARAMETERS, char *command
 	}
 
 	if(php_mmc_store(mmc_object, key, key_len, value, flag, expire, cas, shard_key, shard_key_len, command, command_len, by_key, val_len)) {
-		if (zval_cas) {
+		if (cas > 0 && zval_cas) {
 			if (Z_TYPE_P(zval_cas) == IS_STRING) {
 				efree(Z_STRVAL_P(zval_cas));
 			}
@@ -4430,7 +4444,10 @@ PHP_FUNCTION(memcache_get2)
 {
 	mmc_pool_t *pool;
 	zval *zkey, *zvalue, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
+	char key[MMC_KEY_MAX_SIZE];
 
 	LogManager::getLogger()->setCmd("get2");
 
@@ -4460,7 +4477,7 @@ PHP_FUNCTION(memcache_get2)
 
 	zend_bool old_false_on_failure = pool->false_on_error;
 	pool->false_on_error = 1;
-	php_mmc_get(pool, zkey, &tmp, &return_value, flags, cas, false);
+	php_mmc_get(pool, zkey, key, &tmp, &return_value, flags, cas, false);
 	pool->false_on_error = old_false_on_failure;
 
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
@@ -4620,7 +4637,8 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 
 	HashTable *key_hash;
 	int key_array_count = 0;
-	LogManager lm(logData, false);
+	mc_logger_t logData;
+	LogManager lm(&logData, false);
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -4751,7 +4769,10 @@ PHP_FUNCTION(memcache_getByKey)
 	zval *mmc_object = getThis();
 	zval *flags = NULL;
 	zval *cas = NULL;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
+	char key[MMC_KEY_MAX_SIZE];
 
 	LogManager::getLogger()->setCmd("getBykey");
 
@@ -4779,7 +4800,7 @@ PHP_FUNCTION(memcache_getByKey)
 	MAKE_STD_ZVAL(tmp);
 	ZVAL_NULL(tmp);
 
-	int result = php_mmc_get_by_key(pool, zkey, zshardKey, tmp, flags, cas TSRMLS_CC);
+	int result = php_mmc_get_by_key(pool, zkey, key, zshardKey, tmp, flags, cas TSRMLS_CC);
 
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
 	FREE_ZVAL(tmp);
@@ -4809,10 +4830,9 @@ PHP_FUNCTION(memcache_getByKey)
  * @param cas The compare and swap token
  * @return int -1 on failures, otherwise >= 0.
  */
-static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, zval *zshardKey, zval *zvalue, zval *return_flags,
+static int php_mmc_get_by_key(mmc_pool_t *pool, zval *zkey, char *key, zval *zshardKey, zval *zvalue, zval *return_flags,
 	zval *return_cas TSRMLS_DC) {
 
-	static char key[MMC_KEY_MAX_SIZE];
 	char shardKey[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
 	unsigned int shardKey_len;
@@ -4984,7 +5004,8 @@ PHP_FUNCTION(memcache_getMultiByKey) {
 	mmc_pool_t *pool;
 	zval *zkey_array;
 	zval *mmc_object = getThis();
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	if (mmc_object == NULL) {
 		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Oz", &mmc_object, memcache_class_entry_ptr, &zkey_array) == FAILURE) {
@@ -5092,7 +5113,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 			zval **zshardkey;
 			zval *zkey;
 			zval **value_array;
-			static char key[MMC_KEY_MAX_SIZE];
+			char key[MMC_KEY_MAX_SIZE];
 			char shardkey[MMC_KEY_MAX_SIZE];
 			unsigned int key_len, shardkey_len;
 
@@ -5316,7 +5337,9 @@ PHP_FUNCTION(memcache_getl)
 								// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0 
 								// (=0 if there is a lock error but the lock has no metadata)
 
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("getl");
 
 	if (mmc_object == NULL) {
@@ -5372,7 +5395,8 @@ PHP_FUNCTION(memcache_findserver)
 	unsigned int key_len;
 
     mmc_t *mmc;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("findserver");
 
@@ -5433,7 +5457,8 @@ PHP_FUNCTION(memcache_unlock)
 	zval *mmc_object = getThis(), *zkey = NULL;
 	unsigned long cas = 0;
 	mmc_pool_t *pool;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("unlock");
 
@@ -5468,9 +5493,12 @@ PHP_FUNCTION(memcache_get)
 {
 	mmc_pool_t *pool;
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	zval **data;
 	bool return_corrupted = false;
+	char key[MMC_KEY_MAX_SIZE];
 
 	LogManager::getLogger()->setCmd("get");
 
@@ -5492,7 +5520,7 @@ PHP_FUNCTION(memcache_get)
 		RETURN_FALSE;
 	}
 
-	php_mmc_get(pool, zkey, &return_value, NULL, flags, cas, return_corrupted);
+	php_mmc_get(pool, zkey, key, &return_value, NULL, flags, cas, return_corrupted);
 }
 
 static void php_mmc_getl(mmc_pool_t *pool, zval *zkey, zval **return_value, zval *flags, zval *cas, int timeout, char *metadata, int &metadata_len) /* {{{ */
@@ -5554,9 +5582,8 @@ static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTE
 		zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
 }
 
-static void php_mmc_get(mmc_pool_t *pool, zval *zkey, zval **return_value, zval **status_array, zval *flags, zval *cas, bool return_corrupted) /* {{{ */
+static void php_mmc_get(mmc_pool_t *pool, zval *zkey, char *key, zval **return_value, zval **status_array, zval *flags, zval *cas, bool return_corrupted) /* {{{ */
 {
-	static char key[MMC_KEY_MAX_SIZE];
 	unsigned int key_len;
 	LogManager::getLogger()->setCommandType(GET);
 
@@ -5593,7 +5620,8 @@ PHP_FUNCTION(memcache_delete)
 	long time = 0;
 	char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("delete");
 
@@ -5666,7 +5694,8 @@ PHP_FUNCTION(memcache_deleteByKey) {
 	unsigned int key_tmp_len;
 	char shard_key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int shard_key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("deleteByKey");
 
@@ -5820,7 +5849,8 @@ static void php_mmc_delete_multi_by_key(mmc_pool_t *pool, zval *zkey_array, int 
 
 	HashTable *key_hash;
 	int key_array_count = 0;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -5905,7 +5935,9 @@ PHP_FUNCTION(memcache_get_stats)
 	char *type = NULL;
 	int type_len = 0;
 	long slabid = 0, limit = MMC_DEFAULT_CACHEDUMP_LIMIT;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("getstats");
 
 	if (mmc_object == NULL) {
@@ -5964,7 +5996,9 @@ PHP_FUNCTION(memcache_get_extended_stats)
 	int type_len = 0;
 	long slabid = 0, limit = MMC_DEFAULT_CACHEDUMP_LIMIT;
 
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("getextendedstats");
 
 	if (mmc_object == NULL) {
@@ -6022,7 +6056,9 @@ PHP_FUNCTION(memcache_set_compress_threshold)
 	zval *mmc_object = getThis();
 	long threshold;
 	double min_savings = MMC_DEFAULT_SAVINGS;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("setcompressthreshold");
 
 	if (mmc_object == NULL) {
@@ -6078,7 +6114,9 @@ PHP_FUNCTION(memcache_increment) {
 	zval *mmc_object = getThis();
 	char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("increment");
 
 	if (mmc_object == NULL) {
@@ -6133,7 +6171,9 @@ PHP_FUNCTION(memcache_incrementByKey) {
 	unsigned int key_tmp_len;
 	char shard_key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int shard_key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("incrementbykey");
 
 	if (mmc_object == NULL) {
@@ -6182,7 +6222,9 @@ PHP_FUNCTION(memcache_decrement) {
 	zval *mmc_object = getThis();
 	char key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("decrement");
 
 	if (mmc_object == NULL) {
@@ -6237,7 +6279,9 @@ PHP_FUNCTION(memcache_decrementByKey) {
 	unsigned int key_tmp_len;
 	char shard_key_tmp[MMC_KEY_MAX_SIZE];
 	unsigned int shard_key_tmp_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("decrementbykey");
 
 	if (mmc_object == NULL) {
@@ -6282,7 +6326,9 @@ PHP_FUNCTION(memcache_close)
 {
 	mmc_pool_t *pool;
 	zval *mmc_object = getThis();
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
+	
 	LogManager::getLogger()->setCmd("close");
 
 	if (mmc_object == NULL) {
@@ -6317,7 +6363,8 @@ PHP_FUNCTION(memcache_flush)
 	int i, failures = 0;
 	zval *mmc_object = getThis();
 	long timestamp = 0;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("flush");
 
@@ -6372,7 +6419,8 @@ PHP_FUNCTION(memcache_setproperty)
 	zval *val;
 	char *prop;
 	int prop_len;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("setproperty");
 
@@ -6433,7 +6481,8 @@ PHP_FUNCTION(memcache_enable_proxy)
 	mmc_pool_t *pool;
 	zval *mmc_object = getThis();
 	zend_bool onoff;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("enableproxy");
 
@@ -6473,7 +6522,8 @@ PHP_FUNCTION(memcache_setoptimeout)
 	int i;
 	zval *mmc_object = getThis();
 	long timeoutms = 0;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("settimeout");
 
@@ -6519,7 +6569,8 @@ PHP_FUNCTION(memcache_setlogname)
 	zval *mmc_object = getThis();
 	char *log_name;
 	int log_name_len = 0;
-	LogManager lm(logData);
+	mc_logger_t logData;
+	LogManager lm(&logData);
 
 	LogManager::getLogger()->setCmd("setlogname");
 

@@ -3,14 +3,16 @@
 #include <sys/time.h>
 #include <syslog.h>
 #include <sstream>
+#include <stack>
 #include "log.h"
 
 enum field_type {INVAL, STRING, NUMBER};
 enum cmdType {OTHERS = 0, GET, SET};
 class RequestLogger; 
 class logOutPut;
+struct mc_logger;
 typedef struct timeval timeStruct;
-
+extern std::stack<mc_logger *> loggerStack;
 
 class Timer {
 protected:
@@ -97,7 +99,6 @@ typedef struct mc_logger : public Timer {
     unsigned long long cas;
     timeStruct startTime;
     cmdType ctype;
-
 } mc_logger_t;
 #undef __TN__
 
@@ -195,6 +196,15 @@ public:
 
     static inline mc_logger_t *getLogger() {
         return val;
+    }
+
+    static inline void saveLogger() {
+        loggerStack.push(val);
+    }
+
+    static inline void restoreLogger() {
+        val = loggerStack.top();
+        loggerStack.pop();
     }
 
     ~LogManager() {
