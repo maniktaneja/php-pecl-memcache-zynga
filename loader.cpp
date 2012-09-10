@@ -9,7 +9,9 @@
 
 std::string errorString;
 static mc_logger_t record; 
-std::stack<mc_logger *> loggerStack;
+std::stack<keyLoggerMap_t *> loggerStack;
+const char *LogManager::defaultKey = "_";
+keyLoggerMap_t *LogManager::kl = NULL;
 
 bool LogManager::statConfigNotChanged(char *file) {
     static struct stat fileStat;

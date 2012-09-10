@@ -4,7 +4,10 @@
 #include <syslog.h>
 #include <sstream>
 #include <stack>
+#include<map>
+//#include <unordered_map>
 #include "log.h"
+//std::tr1
 
 enum field_type {INVAL, STRING, NUMBER};
 enum cmdType {OTHERS = 0, GET, SET};
@@ -12,7 +15,8 @@ class RequestLogger;
 class logOutPut;
 struct mc_logger;
 typedef struct timeval timeStruct;
-extern std::stack<mc_logger *> loggerStack;
+typedef std::map<std::string, mc_logger *> keyLoggerMap_t;
+extern std::stack<keyLoggerMap_t *> loggerStack;
 
 class Timer {
 protected:
@@ -46,7 +50,14 @@ typedef struct mc_logger : public Timer {
     }
  
     void setKey(const char *ln) {
-        key = (char *)ln;
+        if (key) {
+            free(key);
+        }
+        key = strdup(ln);
+    } 
+
+    char *getKey() {
+        return key;
     } 
 
     void setCmd(char *ln) {
@@ -188,33 +199,66 @@ private:
 class LogManager : public Timer {
 public:
     LogManager(mc_logger_t *v, bool p = true) {
-        val = v;
-        cleanData();
+        kl = new keyLoggerMap_t; 
+        setLogger(defaultKey);
         recordTime(&startTime);
-        mPublish = p;
+    }
+
+    static inline void setMulti() {
+        keyLoggerMap_t::iterator it = kl->find(defaultKey); 
+        if (it != kl->end()) {
+            mc_logger_t * v = it->second;
+            delete v->getKey();
+            delete v;
+            kl->erase(it);
+        }
     }
 
     static inline mc_logger_t *getLogger() {
-        return val;
+        return getLogger(defaultKey);
+    }
+
+    static inline mc_logger_t *setLogger(const char *key) {
+        keyLoggerMap_t::iterator it = kl->find(key);
+        if (it == kl->end() && kl->size() <= maxLoggerSize) {
+            mc_logger_t *n = new mc_logger_t;
+            cleanData(n);
+            (*kl)[key] = n;
+            n->setKey(key);
+        } 
+    }
+
+    static inline mc_logger_t *getLogger(const char *key) {
+        keyLoggerMap_t::iterator it = kl->find(key);
+        if (it != kl->end()) {           
+            return it->second;
+        } else {
+            return kl->find(defaultKey)->second;
+        } 
     }
 
     static inline void saveLogger() {
-        loggerStack.push(val);
+        loggerStack.push(kl);
     }
 
     static inline void restoreLogger() {
-        val = loggerStack.top();
+        kl = loggerStack.top();
         loggerStack.pop();
     }
 
     ~LogManager() {
-        if (mPublish) {
-            recordTime(&endTime);
-            uint64_t tmp = diffTime(startTime, endTime);
-            RequestLogger::instance()->addTime(val->ctype, tmp);
-            val->setResTime(tmp);
-            logPublishRecord(val);
+        recordTime(&endTime);
+        uint64_t tmp = diffTime(startTime, endTime);
+        keyLoggerMap_t::iterator it = kl->begin();
+        for (;it != kl->end(); ++it) {
+            mc_logger_t *v = it->second;
+            RequestLogger::instance()->addTime(v->ctype, tmp);
+            v->setResTime(tmp);
+            logPublishRecord(v);
+            free(v->getKey());
+            delete v;
         }
+        delete kl;
     }
 
     static const char *checkAndLoadConfig(char *file_path);
@@ -222,15 +266,18 @@ public:
     static void logPublishRecord(mc_logger_t *d);   
  
 private:
-    void cleanData() {
-        memset(val, 0, sizeof(mc_logger_t));
-        val->setLogName("unassigned");
+
+    static void cleanData(mc_logger_t *v) {
+        memset(v, 0, sizeof(mc_logger_t));
+        v->setLogName("unassigned");
     }
 
-    bool mPublish;
-    static mc_logger_t *val;
+    static const char *defaultKey;
+    static int const maxLoggerSize = 50;
+    static keyLoggerMap_t *kl;    
     timeStruct startTime, endTime;
 };
+
 
 //request codes
 #define MC_SUCCESS              0x0
@@ -292,6 +339,8 @@ private:
 #define DI_CHECKSUM_GET_FAILED_MOXI     137
 #define DI_CHECKSUM_SET_FAILED      138
 #define DI_CHECKSUM_GET_FAILED_BYKEY  139
+#define WRITE_TO_SERVER_FAILED  140            
+#define UNSERIALIZE_FAILED      141
 
 #endif
 
