@@ -92,7 +92,7 @@ PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 
-#define PHP_MEMCACHE_VERSION "2.5.0.0"
+#define PHP_MEMCACHE_VERSION "2.5.0.1"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)
@@ -245,6 +245,7 @@ ZEND_BEGIN_MODULE_GLOBALS(memcache)
 	zend_bool data_integrity_support;
 	long integrity_error_retry_count;
 	char *integrity_algo;
+	long log_max_multi_op;
     lzo_align_t __LZO_MMODEL lzo_wmem[ ((LZO1X_1_MEM_COMPRESS) + (sizeof(lzo_align_t) - 1)) / sizeof(lzo_align_t) ];
 ZEND_END_MODULE_GLOBALS(memcache)
 
