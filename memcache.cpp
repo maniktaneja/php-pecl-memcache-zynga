@@ -3152,7 +3152,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 		if (!mmc_uncompress(&result_data, &result_len, hp, hp_len, *flags)) {
 			mmc_server_seterror(mmc, "Failed to uncompress data", 0);
 			efree(data);
-			php_error(E_WARNING, "unable to uncompress data from server=%s", mmc->host);
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "unable to uncompress data from server=%s", mmc->host);
 			LogManager::getLogger()->setCode(UNCOMPRESS_FAILED);
 			return -2;
 		}
