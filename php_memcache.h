@@ -65,6 +65,7 @@ PHP_FUNCTION(memcache_get);
 PHP_FUNCTION(memcache_get2);
 PHP_FUNCTION(memcache_getl);
 PHP_FUNCTION(memcache_unlock);
+PHP_FUNCTION(memcache_unlockMultiByKey);
 PHP_FUNCTION(memcache_getByKey);
 PHP_FUNCTION(memcache_getMultiByKey);
 PHP_FUNCTION(memcache_casByKey);
@@ -91,8 +92,9 @@ PHP_FUNCTION(memcache_setoptimeout);
 PHP_FUNCTION(memcache_enable_proxy);
 PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
+PHP_FUNCTION(memcache_getlMultiByKey);
 
-#define PHP_MEMCACHE_VERSION "2.5.0.2"
+#define PHP_MEMCACHE_VERSION "2.5.0.3"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)
@@ -109,7 +111,7 @@ PHP_FUNCTION(memcache_setlogname);
 #define MMC_CHKSUM_LEN    50
 #define MAX_CRC_BUF 50
 #define MAX_METADATA_LEN	1024
-
+#define TERM "\r\n"
 
 #define MMC_STATUS_FAILED 0
 #define MMC_STATUS_DISCONNECTED 1
@@ -162,6 +164,7 @@ typedef struct mmc {
 	long					retry_interval;
 	int						persistent;
 	int						status;
+	int 					index;					/* added for getlbykey */
 	char					*error;					/* last error message */
 	int						errnum;					/* last error code */
 	zval					*failure_callback;
@@ -274,6 +277,8 @@ int mmc_delete(mmc_t *, const char *, int, int TSRMLS_DC);
 mmc_t *mmc_get_proxy(mmc_t *TSRMLS_DC);
 void mmc_server_disconnect(mmc_t *mmc TSRMLS_DC);
 mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len);
+void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_value, zval **status_array, zval *return_flags, zval *return_cas, zval *return_metadata);
+void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkey, zval **status_array,INTERNAL_FUNCTION_PARAMETERS);
 
 #define MAX_TOKENS 1024
 #define MAX_COMMAND_LINE_LEN 2048

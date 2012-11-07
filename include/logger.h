@@ -70,6 +70,10 @@ typedef struct mc_logger : public Timer {
         res_code = ln;
     }
  
+    int getCode() {
+        return res_code;
+    }
+
     void setResTime(unsigned int ln) {
         res_time = ln;
     } 
@@ -237,10 +241,11 @@ public:
     }
 
     static inline void setLogger(const char *key) {
-        assert(kl);
-        keyLoggerMap_t::iterator it = kl->find(key);
-         if (it != kl->end()) {           
-            val = it->second;
+        if (kl) {
+            keyLoggerMap_t::iterator it = kl->find(key);
+            if (it != kl->end()) {           
+                val = it->second;
+            }
         }
     }
 
@@ -343,7 +348,7 @@ private:
 #define READ_VALUE_FAILED         125 
 #define UNCOMPRESS_FAILED         126 
 #define PARSE_RESPONSE_FAILED     127
-#define INVALID_CAS               128
+#define CODE_NOT_USED              128
 #define DI_CHECKSUM_GET_FAILED_GETL 129
 #define DI_CHECKSUM_GET_FAILED_GET  130
 #define DI_CHECKSUM_GET_FAILED1     131
