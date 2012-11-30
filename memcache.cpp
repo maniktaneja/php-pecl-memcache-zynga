@@ -6013,7 +6013,8 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf),
 									sizeof("NOT_FOUND")-1)) {
 							LogManager::getLogger()->setCode(MC_NOT_FOUND);	
-
+							//set the status to true if key is not found
+							add_assoc_bool_ex(*status_array, tokens[tok_index].value, tokens[tok_index].length+1, 1);
 						} else {
 							break;
 						}

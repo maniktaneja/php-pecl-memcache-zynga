@@ -94,7 +94,7 @@ PHP_FUNCTION(memcache_setproperty);
 PHP_FUNCTION(memcache_setlogname);
 PHP_FUNCTION(memcache_getlMultiByKey);
 
-#define PHP_MEMCACHE_VERSION "2.5.0.3"
+#define PHP_MEMCACHE_VERSION "2.5.0.4"
 
 #define MMC_BUF_SIZE 4096
 #define MMC_SERIALIZED				(1 << 0)
