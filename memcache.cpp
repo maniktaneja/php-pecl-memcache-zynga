@@ -1359,7 +1359,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	int request_len, result = -1;
 	char *key_copy = NULL, *data = NULL, *shard_key_copy = NULL;
 	unsigned long **cas_lookup;
-	char add_old_crc = pool->enable_checksum;
 	char add_new_crc, calc_crc;
 	unsigned int new_crc_len ;
 	unsigned int crc32 = 0;		// crc header of the compressed data
@@ -1413,7 +1412,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			/* skip compression when the command is either append or prepend */
 			if (strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len)) {
 				flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
-				add_old_crc = 0;
 			}
 		}
 
@@ -1421,10 +1419,9 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		calc_crc = 0;
 		add_new_crc = (mmc->di_algo_in_use & DI_CHKSUM_CRC) || (mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF);
 		// Add old style CRC (before the blob) only if data integrity is enabled but new style checksum is NOT supported (maybe because mcmux or MB is old)
-		add_old_crc = !add_new_crc && add_old_crc;
 		// We need to calculate CRC if the feature is enabled AND (new style CRC is required OR old style CRC is required)
-		calc_crc = (mmc->di_algo_in_use & DI_CHKSUM_CRC) || add_old_crc;
-		MMC_DEBUG(("add_new_crc set to %d add old crc set to %d\n", add_new_crc, add_old_crc));
+		calc_crc = mmc->di_algo_in_use & DI_CHKSUM_CRC;
+		MMC_DEBUG(("add_new_crc set to %d \n", add_new_crc));
 
 		// For the new style checksum, we want to protect flags using the checksum. 
 		// If the data is compressed, include flags in the compressed checksum. 
@@ -1487,18 +1484,6 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			} else {
 				len_crc_in_hdr = snprintf(crc_in_hdr, MAX_CRC_BUF, "%.4x:%.8x", chksum_metadata, uncrc32);
 			}
-		} else if (add_old_crc) {
-		// create the crc encapsulated header
-			if (crc32)  {
-				len_crc_in_val = snprintf(crc_in_val, MAX_CRC_BUF,  "%x\r%x\r\n", crc32, uncrc32);
-			} else {
-				len_crc_in_val = snprintf(crc_in_val, MAX_CRC_BUF, "%x\r\n", uncrc32);
-			}
-		   //increment value_len to accomodate the size of the crc header
-			value_len += len_crc_in_val;
-			flags |= MMC_CHKSUM;
-		} else {
-			flags &= ~MMC_CHKSUM;
 		}
 
 
