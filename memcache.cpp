@@ -6072,7 +6072,12 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 					mmc_server_failure(pool->requests[j] TSRMLS_CC);
 					result_status = result;
 					if (status_array) {
-						update_result_array(&(*status_array), command_line[j].c, READ_FROM_SERVER_FAILED);
+						for (i = 1; i < ntokens; i = i+1) {
+							if (tokens[i].value) {
+								add_assoc_bool_ex(*status_array, tokens[i].value, tokens[i].length + 1, 0);
+								LogManager::getLogger(tokens[i].value)->setCode(READ_FROM_SERVER_FAILED);
+							}
+						}
 					}
 				}
 			}
@@ -6333,7 +6338,12 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 			if (result < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);
 				if (status_array) {
-					update_result_array(&(*status_array), command_line[j].c, READ_FROM_SERVER_FAILED);
+					for (i = 1; i < ntokens; i = i+1) {
+						if (tokens[i].value) {
+							add_assoc_bool_ex(*status_array, tokens[i].value, tokens[i].length + 1, 0);
+							LogManager::getLogger(tokens[i].value)->setCode(READ_FROM_SERVER_FAILED);
+						}
+					}
 				}
 			}
 		}
