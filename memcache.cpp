@@ -4722,6 +4722,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 	int key_array_count = 0;
 	mc_logger_t logData;
 	char multi_cmd[MMC_KEY_MAX_SIZE];
+	mmc_init_multi(TSRMLS_C);
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -4835,6 +4836,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 		LogManager::getLogger()->setCmd(multi_cmd);
 	}
 
+	mmc_free_multi(TSRMLS_C);	
 	FREE_ZVAL(tmp);
 	MMC_DEBUG(("php_mmc_store_multi_by_key: Exit"));
 }
