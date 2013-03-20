@@ -4722,6 +4722,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 	int key_array_count = 0;
 	mc_logger_t logData;
 	char multi_cmd[MMC_KEY_MAX_SIZE];
+	mmc_init_multi(TSRMLS_C);
 
 	// Start with a clean return array
 	array_init(*return_value);
@@ -4835,6 +4836,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 		LogManager::getLogger()->setCmd(multi_cmd);
 	}
 
+	mmc_free_multi(TSRMLS_C);	
 	FREE_ZVAL(tmp);
 	MMC_DEBUG(("php_mmc_store_multi_by_key: Exit"));
 }
@@ -6072,7 +6074,12 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 					mmc_server_failure(pool->requests[j] TSRMLS_CC);
 					result_status = result;
 					if (status_array) {
-						update_result_array(&(*status_array), command_line[j].c, READ_FROM_SERVER_FAILED);
+						for (i = 1; i < ntokens; i = i+1) {
+							if (tokens[i].value) {
+								add_assoc_bool_ex(*status_array, tokens[i].value, tokens[i].length + 1, 0);
+								LogManager::getLogger(tokens[i].value)->setCode(READ_FROM_SERVER_FAILED);
+							}
+						}
 					}
 				}
 			}
@@ -6333,7 +6340,12 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 			if (result < 0) {
 				mmc_server_failure(mmc TSRMLS_CC);
 				if (status_array) {
-					update_result_array(&(*status_array), command_line[j].c, READ_FROM_SERVER_FAILED);
+					for (i = 1; i < ntokens; i = i+1) {
+						if (tokens[i].value) {
+							add_assoc_bool_ex(*status_array, tokens[i].value, tokens[i].length + 1, 0);
+							LogManager::getLogger(tokens[i].value)->setCode(READ_FROM_SERVER_FAILED);
+						}
+					}
 				}
 			}
 		}
