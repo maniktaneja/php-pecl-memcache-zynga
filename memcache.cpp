@@ -1404,15 +1404,14 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			cas_key = (char *)key;
 			cas_key_len = key_len+1;
 		}
-
+		
 		/* autocompress large values */
-		if (pool->compress_threshold && value_len >= pool->compress_threshold &&
-			!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2))) {
-
-			/* skip compression when the command is either append or prepend */
-			if (strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len)) {
-				flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
-			}
+		/* skip compression when the command is either append or prepend */
+		if (!(strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len))) {
+			flags = 0;	
+		} else if (pool->compress_threshold && value_len >= pool->compress_threshold &&
+				!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2))) {
+			flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
 		}
 
 		add_new_crc = 0;

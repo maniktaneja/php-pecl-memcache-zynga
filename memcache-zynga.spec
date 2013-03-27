@@ -9,7 +9,7 @@
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.5.0.6
+Version:      2.5.0.7
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
