@@ -154,6 +154,17 @@ if test "$PHP_MEMCACHE" != "no"; then
     AC_MSG_RESULT([disabled])
   fi
 
+  AC_MSG_CHECKING([for minilzo library])
+  PHP_PARSELIB_DIR="/usr/local/lib64"
+  PHP_PARSELIB_INCPATH="/usr/local/include/minilzo"
+  if test -f "$PHP_PARSELIB_INCPATH/minilzo.h"; then
+    PHP_ADD_LIBRARY_WITH_PATH(minilzo, $PHP_PARSELIB_DIR, MEMCACHE_SHARED_LIBADD)
+    PHP_ADD_INCLUDE($PHP_PARSELIB_INCPATH)
+    PHP_SUBST(MEMCACHE_SHARED_LIBADD)
+  else
+    AC_MSG_ERROR([Cannot find parsing minilzo])
+  fi
+
   AC_CHECK_TYPE(ptrdiff_t,long)
   AC_TYPE_SIZE_T
   AC_CHECK_SIZEOF(short)
@@ -175,7 +186,7 @@ if test "$PHP_MEMCACHE" != "no"; then
     AC_MSG_RESULT([enabled])
     AC_DEFINE(HAVE_MEMCACHE_SESSION,1,[Whether memcache session handler is enabled])
     AC_DEFINE(HAVE_MEMCACHE,1,[Whether you want memcache support])
-    PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.c memcache_session.c minilzo/minilzo.c loader.cpp log.cpp parse.cpp, $ext_shared,,-I$session_inc_path -I$abs_srcdir/minilzo -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
+    PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.c memcache_session.c loader.cpp log.cpp parse.cpp, $ext_shared,,-I$session_inc_path -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
     ifdef([PHP_ADD_EXTENSION_DEP]$abs_srcdir/include ,
     [
       PHP_ADD_EXTENSION_DEP(memcache, session)
@@ -184,7 +195,7 @@ if test "$PHP_MEMCACHE" != "no"; then
     AC_MSG_RESULT([disabled])
     AC_DEFINE(HAVE_MEMCACHE,1,[Whether you want memcache support])
     PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.c, $ext_shared)
-    PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.cc minilzo/minilzo.c loader.cpp log.cpp parse.cpp, $ext_shared,,-I$abs_srcdir/minilzo -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
+    PHP_NEW_EXTENSION(memcache, memcache.cpp memcache_queue.c memcache_standard_hash.c memcache_consistent_hash.cc loader.cpp log.cpp parse.cpp, $ext_shared, -I$abs_srcdir/include -DMINILZO_HAVE_CONFIG_H)
   fi
 
 dnl this is needed to build the extension with phpize and -Wall

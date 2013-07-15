@@ -19,7 +19,6 @@ FILES="config9.m4 \
 	xml2changelog \
 	package.xml \
 	memcache-zynga.spec \
-	minilzo \
     include \
     loader.cpp \
     log.cpp \
