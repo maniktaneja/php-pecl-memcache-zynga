@@ -4888,16 +4888,16 @@ PHP_FUNCTION(memcache_getByKey)
 
 	LogManager::getLogger()->setCommandType(GET);
 	LogManager::getLogger()->setLogName(pool->log_name);
-
+/*
 	zval *tmp;
 	MAKE_STD_ZVAL(tmp);
 	ZVAL_NULL(tmp);
-
-	int result = php_mmc_get_by_key(pool, zkey, key, zshardKey, tmp, flags, cas TSRMLS_CC);
-
+*/
+	int result = php_mmc_get_by_key(pool, zkey, key, zshardKey, zvalue, flags, cas TSRMLS_CC);
+/*
 	REPLACE_ZVAL_VALUE(&zvalue, tmp, 0);
 	FREE_ZVAL(tmp);
-
+*/
 	if(result < 0) {
 		zval_dtor(zvalue);
 		LogManager::getLogger()->setCode(CMD_FAILED);

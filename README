@@ -24,12 +24,13 @@ returns connection error.
 
 Building:
 
-    Make sure php-devel and php-pear packages are installed
+    Make sure php-devel, php-pear, bzip2, bzip2-devel packages are installed
     Please install igbinary and minilzo. These rpms can be installed from the following 
     git links :
         https://github.com/nimishzynga/minilzo/releases/download/1/minilzo-2.03-6.x86_64.rpm
         https://github.com/nimishzynga/php-igbinary/releases/download/1/php-igbinary-1.1.1-0_5.2.10.x86_64.rpm
  
+
     run ./build-rpm.sh for creating the rpm
 
 
