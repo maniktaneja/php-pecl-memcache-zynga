@@ -188,7 +188,7 @@ fi
 
 %changelog
 
-* Thu August 20 2013 <mtaneja@zynga.com> 2.5.0.8
+* Thu Aug 29 2013 <mtaneja@zynga.com> 2.5.0.9
 - Add retry logic to mmc_readline to avoid spurious
   connection failures
 
