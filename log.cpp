@@ -71,7 +71,7 @@ int fileOut::write(const char *fmt, ...) {
     int out;
 
     time(&t);
-    logbuf_used += strftime(logbuf+logbuf_used, MAX_LOGBUF_LEN - 2, 
+    logbuf_used += strftime(logbuf+logbuf_used, MAX_LOGBUF_LEN - 2,
             "[%Y-%m-%d %H:%M:%S] ", localtime(&t));
     va_start(ap, fmt);
     if ((out = vsnprintf((logbuf + logbuf_used), (MAX_LOGBUF_LEN - logbuf_used - 2),
@@ -83,7 +83,7 @@ int fileOut::write(const char *fmt, ...) {
     va_end(ap);
     logbuf[logbuf_used] = '\n';
     logbuf[logbuf_used+1] = '\0';
-    ::write(logFd, logbuf, logbuf_used+1);  
+    ::write(logFd, logbuf, logbuf_used+1);
     return 0;
 }
 
@@ -112,7 +112,7 @@ int syslogOut::write(const char *fmt, ...) {
 
     logbuf[logbuf_used] = '\n';
     logbuf[logbuf_used+1] = '\0';
-    syslog(type, "%s", logbuf);  
+    syslog(type, "%s", logbuf);
     return 0;
 }
 

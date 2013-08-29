@@ -172,9 +172,9 @@ typedef struct mmc {
 	zend_bool				in_free;
 	zend_bool				got_options;
 	unsigned char			data_integrity_algo;
-	unsigned char			di_algo_in_use;	// The actual algo in use on the connection. 
-											// (derived from checksum settings on the pool and 
-											// what mcmux/membase supports (mmc->data_integrity_algo))   
+	unsigned char			di_algo_in_use;	// The actual algo in use on the connection.
+											// (derived from checksum settings on the pool and
+											// what mcmux/membase supports (mmc->data_integrity_algo))
 	struct mmc				*proxy;
 	struct mmc				*next;
 } mmc_t;

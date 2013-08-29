@@ -52,16 +52,16 @@ opr *oprFactory(oprType op) {
         tk.offset = offsetof(mc_logger_t, _field);  \
         tk.ty = OPRND;                              \
         tk.opndType = _opndType;                    \
-    } else                                          
-               
+    } else
+
 token exprParser :: getNextToken() {
     token tk;
-    tk.ty = NA;   
+    tk.ty = NA;
     if (itr == strs.end()) {
         tk.ty = END;
         return tk;
     }
-        
+
     RULE_FIELDS
 
 #undef __TN__
@@ -107,9 +107,9 @@ token exprParser :: getNextToken() {
     }
     else {
         tk.ty = VALUE;
-        LOG("value = %s", (*itr).c_str()); 
+        LOG("value = %s", (*itr).c_str());
     }
-    
+
     tk.str = *itr;
     itr++;
     return tk;
@@ -137,8 +137,8 @@ bool exprParser::checkInvalidOpr(genNode *oprNode, genNode *leftNode, genNode *r
             return false;
         }
     }
-    else if (((leaf *)leftNode)->left == NULL) { 
-        if (((leaf *)leftNode)->getType() != OPRND) {    
+    else if (((leaf *)leftNode)->left == NULL) {
+        if (((leaf *)leftNode)->getType() != OPRND) {
             LOG("Invalid oprand");
             return false;
         }
@@ -180,32 +180,32 @@ bool exprParser :: buildTree() {
                     if (oprStk.empty() || oprStk.top()->op->opt <= tk.op ||
                             oprStk.top()->op->opt == BrcsStr) {
                         oprStk.push(new nonLeaf(oprFactory(tk.op)));
-                    } 
+                    }
                     else {
                         if (opndStk.size() > 1) {
                             genNode *n = oprStk.top();
                             oprStk.pop();
                             n->right = opndStk.top();
-                            opndStk.pop();     
-                            n->left = opndStk.top();     
-                            opndStk.pop();     
+                            opndStk.pop();
+                            n->left = opndStk.top();
+                            opndStk.pop();
                             opndStk.push(n);
                             oprStk.push(new nonLeaf(oprFactory(tk.op)));
                             success = checkInvalidOpr(n, n->left, n->right);
                         } else {
                             success = false;
                         }
-                    } 
+                    }
                 }
                 else {
-                    while (!oprStk.empty() && oprStk.top()->op->opt != BrcsStr && 
+                    while (!oprStk.empty() && oprStk.top()->op->opt != BrcsStr &&
                         opndStk.size() > 1 && success) {
                         genNode *n = oprStk.top();
                         oprStk.pop();
-                        n->right = opndStk.top();   
-                        opndStk.pop();  
-                        n->left = opndStk.top();   
-                        opndStk.pop();  
+                        n->right = opndStk.top();
+                        opndStk.pop();
+                        n->left = opndStk.top();
+                        opndStk.pop();
                         opndStk.push(n);
                         success = checkInvalidOpr(n, n->left, n->right);
                     }
@@ -224,10 +224,10 @@ bool exprParser :: buildTree() {
                     if (opndStk.size() > 1) {
                         genNode *n = oprStk.top();
                         oprStk.pop();
-                        n->right = opndStk.top();   
-                        opndStk.pop();  
-                        n->left = opndStk.top();   
-                        opndStk.pop(); 
+                        n->right = opndStk.top();
+                        opndStk.pop();
+                        n->left = opndStk.top();
+                        opndStk.pop();
                         opndStk.push(n);
                         success = checkInvalidOpr(n, n->left, n->right);
                         continue;
@@ -236,7 +236,7 @@ bool exprParser :: buildTree() {
                     break;
                 }
                 if (success) {
-                    if (opndStk.size() == 1 && 
+                    if (opndStk.size() == 1 &&
                         opndStk.top()->op) {
                         root = opndStk.top();
                         return true;
@@ -248,7 +248,7 @@ bool exprParser :: buildTree() {
                 genNode *p;
                 LOG("In the Error");
                 while (!opndStk.empty()) {
-                    p = opndStk.top(); 
+                    p = opndStk.top();
                     opndStk.pop();
                     destroyTree(p);
                 }
@@ -266,7 +266,7 @@ bool exprParser :: buildTree() {
 }
 
 int exprParser :: evaluateTree(data *d, genNode *ptr) {
-    int result1, result2; 
+    int result1, result2;
    if (ptr == NULL) {
         return false;
     }

@@ -87,7 +87,7 @@ function sendMemcacheCommand($server,$port,$command){
     return parseMemcacheResults($buf);
 }
 function parseMemcacheResults($str){
-    
+
 	$res = array();
 	$lines = explode("\r\n",$str);
 	$cnt = count($lines);
@@ -870,7 +870,7 @@ EOB;
         $r = sendMemcacheCommand($h,$p,'delete '.$theKey);
         echo 'Deleting '.$theKey.':'.$r;
 	break;
-    
+
    case 6: // flush server
         $theserver = $MEMCACHE_SERVERS[(int)$_GET['server']];
         $r = flushServer($theserver);

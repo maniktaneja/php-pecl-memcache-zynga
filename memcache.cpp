@@ -513,7 +513,7 @@ static PHP_INI_MH(OnUpdateIntegrityAlgo) /* {{{ */
 			return OnUpdateString(entry, new_value, new_value_length, mh_arg1, mh_arg2, mh_arg3, stage TSRMLS_CC);
 		}
 		else {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "memcache.integrity_algo must be one of {\"%s\", \"%s\"}, will continue to use %s ", 
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "memcache.integrity_algo must be one of {\"%s\", \"%s\"}, will continue to use %s ",
 				DI_CHKSUM_CRC_STR, DI_CHKSUM_OFF_STR, MEMCACHE_G(integrity_algo));
 			return FAILURE;
 		}
@@ -940,7 +940,7 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 	char *options_start, *options_end, *di_options_start;
 
 	options_len = sprintf(options, "options ");
-	options_len += sprintf(options + options_len, "version=%s DIAlgo=%s\r\n", 
+	options_len += sprintf(options + options_len, "version=%s DIAlgo=%s\r\n",
 		PHP_MEMCACHE_VERSION, (pool->enable_checksum == 1) ? MEMCACHE_G(integrity_algo) : DI_CHKSUM_OFF_STR);
 
 	if (mmc->proxy) {
@@ -976,11 +976,11 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 	options_start = mmc->inbuf;
 	options_end = mmc->inbuf + response_len - 2;
 	// Check for Data Integrity algorithm in the options
-	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1) && 
+	if(mmc_str_left(options_start, "options", response_len, sizeof("options") - 1) &&
 		(di_options_start = php_memnstr(options_start, "DIAlgo", sizeof("DIAlgo") -1, options_end)) != NULL) {
 		int di_options_len = options_end - di_options_start;
 		char *di_algo = php_memnstr(di_options_start, "=", 1, di_options_start + di_options_len);
-		if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR, 
+		if (di_algo != NULL && php_memnstr(di_algo, DI_CHKSUM_CRC_STR,
 					sizeof(DI_CHKSUM_CRC_STR) - 1, di_options_start + di_options_len) != NULL) {
 			mmc->data_integrity_algo |= DI_CHKSUM_CRC;
 		}
@@ -994,7 +994,7 @@ static int get_options(mmc_pool_t *pool, mmc_t *mmc)
 
 mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 	mmc_t *mmc = pool->hash->find_server(pool->hash_state, key, key_len, pool->proxy_enabled);
-	if (mmc == NULL || mmc->status == MMC_STATUS_FAILED || (pool->proxy_enabled && mmc->proxy == NULL)) 
+	if (mmc == NULL || mmc->status == MMC_STATUS_FAILED || (pool->proxy_enabled && mmc->proxy == NULL))
 		return mmc;
 
 	// Why chek for proxy->got_options here? we (usually) only have a single connection to the
@@ -1016,7 +1016,7 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 		mmc->di_algo_in_use = mmc->data_integrity_algo;
 	}
 	else {	
-		// The pool settings say checksum are off, the final settings will be OFF or unsupported, 
+		// The pool settings say checksum are off, the final settings will be OFF or unsupported,
 		// depending on what the downstream says
 		if (mmc->data_integrity_algo == DI_CHKSUM_UNSUPPORTED) {
 			mmc->di_algo_in_use = DI_CHKSUM_UNSUPPORTED;
@@ -1025,7 +1025,7 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 			mmc->di_algo_in_use = DI_CHKSUM_SUPPORTED_OFF;
 		}
 	}	
-	MMC_DEBUG(("Pool says checksums = %d, downstream says %d final answer %d \n", pool->enable_checksum, 
+	MMC_DEBUG(("Pool says checksums = %d, downstream says %d final answer %d \n", pool->enable_checksum,
 		mmc->data_integrity_algo, mmc->di_algo_in_use));
 	return mmc;
 }
@@ -1423,8 +1423,8 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		calc_crc = mmc->di_algo_in_use & DI_CHKSUM_CRC;
 		MMC_DEBUG(("add_new_crc set to %d \n", add_new_crc));
 
-		// For the new style checksum, we want to protect flags using the checksum. 
-		// If the data is compressed, include flags in the compressed checksum. 
+		// For the new style checksum, we want to protect flags using the checksum.
+		// If the data is compressed, include flags in the compressed checksum.
 		// Else, include the flags in uncompressed checksum
 
 		if ((flags & MMC_COMPRESSED) || (flags & MMC_COMPRESSED_LZO) || (flags & MMC_COMPRESSED_BZIP2)) {
@@ -1449,7 +1449,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 				if (calc_crc) {
 					uncrc32 = get_checksum(value, value_len);
 					// New style CRC - include the flags in the checksum
-					crc32 = (add_new_crc) ? get_checksum_extra(data, data_len, flags) : 
+					crc32 = (add_new_crc) ? get_checksum_extra(data, data_len, flags) :
 								get_checksum(data, data_len);
 				}
 				value = data;
@@ -1466,10 +1466,10 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 		if (calc_crc && uncrc32 == 0) {
 			// New style CRC - include flags in the checksum
 			if (add_new_crc) {
-				uncrc32 = get_checksum_extra(value, value_len, flags); 
+				uncrc32 = get_checksum_extra(value, value_len, flags);
 			}
 			else {
-				uncrc32 = get_checksum(value, value_len); 
+				uncrc32 = get_checksum(value, value_len);
 			}
 		}
 
@@ -1522,10 +1522,10 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 				);
 
 		if (caslen) {
-			request_len = sprintf(request, "cas %s %d %d %d %s %lu returncas\r\n", 
+			request_len = sprintf(request, "cas %s %d %d %d %s %lu returncas\r\n",
 					key, flags, expire, value_len, len_crc_in_hdr ? crc_in_hdr : "", cas);
 		} else {
-			request_len = sprintf(request, "%s %s %d %d %d %s\r\n", 
+			request_len = sprintf(request, "%s %s %d %d %d %s\r\n",
 					command, key, flags, expire, value_len, len_crc_in_hdr ? crc_in_hdr : "");
 		}
 
@@ -1570,7 +1570,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			efree(key_copy);
 		}
 
-		if (by_key) { 
+		if (by_key) {
 			if (shard_key_copy != NULL) {
 				efree(shard_key_copy);
 			}
@@ -2311,7 +2311,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 			}
 		} while(result == CHKSUM_MISMATCH_DETECTED && ++chksum_error_retry_cnt < MEMCACHE_G(integrity_error_retry_count));
 
-		if (result >= 0) {  
+		if (result >= 0) {
 			if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
 				result = mmc_postprocess_value(key, flags, mmc->host, return_value, value, value_len TSRMLS_CC);
 			}
@@ -2490,7 +2490,7 @@ int mmc_exec_unl_cmd_by_key(mmc_pool_t *pool, mmc_t *mmc, const char *key, int k
 		} else if (mmc_str_left(mmc->inbuf,"UNLOCKED", response_len,
 					sizeof("UNLOCKED") - 1)) {
 			result = 1;
-		} 
+		}
 	}
 
 	delete []cas_key;
@@ -2724,9 +2724,9 @@ static int mmc_exec_retrieval_cmd_multi(
 		/* first pass to build requests for each server */
 		while (zend_hash_get_current_data_ex(Z_ARRVAL_P(keys), (void **)&zkey, &pos) == SUCCESS) {
 			if (mmc_prepare_key(*zkey, key, &key_len TSRMLS_CC) == MMC_OK) {
-				/* schedule key if 
-						- first round OR 
-						- if missing from result OR 
+				/* schedule key if
+						- first round OR
+						- if missing from result OR
 						- If we have a checksum mismatch error for it (and we have not exceeded the checksum error retries)
 				*/
 				LogManager::createLogger(key);
@@ -2734,7 +2734,7 @@ static int mmc_exec_retrieval_cmd_multi(
 				LogManager::getLogger()->setCmd("getMulti");
 				LogManager::getLogger()->setLogName(pool->log_name);
 
-				if (!i || (do_failover && !zend_hash_exists(Z_ARRVAL_PP(return_value), key, key_len +1)) || 
+				if (!i || (do_failover && !zend_hash_exists(Z_ARRVAL_PP(return_value), key, key_len +1)) ||
 						(chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash), key, key_len +1)) ) {
 					if ((mmc = mmc_pool_find(pool, key, key_len TSRMLS_CC)) != NULL && mmc->status != MMC_STATUS_FAILED) {
 						if (!(mmc->outbuf.len)) {
@@ -2883,7 +2883,7 @@ static int mmc_exec_retrieval_cmd_multi(
 			}
 		}
 
-		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 && 
+		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 &&
 							++retry_count < MEMCACHE_G(integrity_error_retry_count);
 		do_failover = result_status < 0 && MEMCACHE_G(allow_failover) && i <= MEMCACHE_G(max_failover_attempts);
 		i++;
@@ -3113,13 +3113,13 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			return CHKSUM_MISMATCH_DETECTED;
 		}
 
-		if ((mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF) == 0 && 
+		if ((mmc->di_algo_in_use & DI_CHKSUM_SUPPORTED_OFF) == 0 &&
 				(chksum_metadata & DI_CHKSUM_SUPPORTED_OFF) == 0) {
 			if (*flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2)) {
 				int cnt = sscanf(chksum, "%x:%x:%x", &chksum_metadata, &crc_value, &uncrc_value);
 				// We dont get the 3 components of the checksum
 				if (cnt < 3) {
-					php_error(E_WARNING, "Data Integrity verification failed, incorrect checksum format" 
+					php_error(E_WARNING, "Data Integrity verification failed, incorrect checksum format"
 							"for compressed data. Chksum %s Key %s Host %s\n",
 							chksum, get_key(mmc->inbuf), mmc->host);
 					*value = data; *value_len = data_len;
@@ -3141,7 +3141,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			}
 
 			if ((chksum_metadata & mmc->di_algo_in_use) == 0) {
-				php_error(E_WARNING, "Cannot verify checksum, mismatch in checksum algorithm. " 
+				php_error(E_WARNING, "Cannot verify checksum, mismatch in checksum algorithm. "
 						"Expected %x, value in header %x Key %s Host %s\n",
 						mmc->di_algo_in_use, chksum_metadata, get_key(mmc->inbuf), mmc->host);
 				*value = data; *value_len = data_len;
@@ -3152,10 +3152,10 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		unsigned int error_flags = ((DI_CHKSUM_MISMATCH_MCMUX) | (DI_CHKSUM_MISMATCH_MOXI) | (DI_CHKSUM_MISMATCH_MB));
 		if (chksum_metadata & error_flags) {
-			php_error(E_WARNING, "Data Integrity verification failed, " 
-					"ckecksum mismatch detected downstream (in %s, integrity algo %x, checksum metadata %x)" 
+			php_error(E_WARNING, "Data Integrity verification failed, "
+					"ckecksum mismatch detected downstream (in %s, integrity algo %x, checksum metadata %x)"
 					". Key %s Host %s, header checksum %x\n",
-					get_componet_name(chksum_metadata), mmc->di_algo_in_use, chksum_metadata, 
+					get_componet_name(chksum_metadata), mmc->di_algo_in_use, chksum_metadata,
 					get_key(mmc->inbuf), mmc->host, uncrc_value);
 			*value = data; *value_len = data_len;
 			switch (chksum_metadata & error_flags) {
@@ -3184,11 +3184,11 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		if (crc_value) {
 			// compute checksum of the compressed data
-			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) : 
+			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) :
 				get_checksum(hp, hp_len);
 			if (crc != crc_value) {
 				char *key = NULL;
-				php_error(E_WARNING, "Data Integrity verification failed on compressed data. " 
+				php_error(E_WARNING, "Data Integrity verification failed on compressed data. "
 						"Key %s Host %s, calculated crc %x crc in header %x\n",
 					get_key(mmc->inbuf), mmc->host, crc, crc_value);
 				*value = data; *value_len = data_len;
@@ -3228,7 +3228,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 		if (uncrc_value) {
 			// compute checksum of the uncompressed data
-			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) : 
+			unsigned int crc = (has_new_checksum) ? get_checksum_extra(hp, hp_len, *flags) :
 				get_checksum(hp, hp_len);
 			if (crc != uncrc_value) {
 				char *key = NULL;
@@ -3952,7 +3952,7 @@ mmc_t *mmc_get_proxy(mmc_t *mmc TSRMLS_DC) /* {{{ */
 
 	if (MEMCACHE_G(in_multi)) {
 		return get_proxy_for_multi(mmc TSRMLS_DC);
-	} 
+	}
 
 	proxy_mmc = mmc_find_persistent(host, host_len, port, timeout, 0, 0 TSRMLS_CC);
 
@@ -5260,14 +5260,14 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				add_assoc_zval(*value_array, "shardKey", *zshardkey);
 			}
 
-			/* schedule key if 
-			   - first round OR 
-			   - if missing from result OR 
+			/* schedule key if
+			   - first round OR
+			   - if missing from result OR
 			   - If we have a checksum mismatch error for it (and we have not exceeded the checksum error retries)
 			 */
 			if ( !i || (do_failover && zend_hash_find(Z_ARRVAL_PP(value_array), "value", sizeof("value"),
 							(void **)&test_value) == SUCCESS && ZVAL_IS_NULL(*test_value)) ||
-					(chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash), key, key_len + 1)) ) {   
+					(chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash), key, key_len + 1)) ) {
 				if ((mmc = mmc_pool_find(pool, shardkey, shardkey_len TSRMLS_CC)) != NULL &&
 					mmc->status != MMC_STATUS_FAILED) {
 					LogManager::getLogger()->setHost(mmc->host);
@@ -5279,7 +5279,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 					append_php_smart_string(&(mmc->outbuf), " ", 1);
 					append_php_smart_string(&(mmc->outbuf), key, key_len);
 					MMC_DEBUG(("mmc_exec_retrieval_cmd_multi: scheduled key '%s' for '%s:%d' request length '%d'", key, mmc->host, mmc->port, mmc->outbuf.len));
-				} 
+				}
 				else {
 					/*key belongs to a failed server */
 					add_assoc_bool(*value_array, "status", 0);
@@ -5347,7 +5347,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 						add_assoc_bool(*value_array, "status", 0);
 						efree(value);
 					}
-					else { 
+					else {
 						if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
 							/* don't store duplicate values */
 							if ((zend_hash_find(Z_ARRVAL_PP(value_array), "value", sizeof("value"),
@@ -5396,9 +5396,9 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 			efree(command_line[j]);
 		}
 
-		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 && 
-							++retry_count < MEMCACHE_G(integrity_error_retry_count); 
-		do_failover = result_status < 0 && MEMCACHE_G(allow_failover) && i <= MEMCACHE_G(max_failover_attempts); 
+		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 &&
+							++retry_count < MEMCACHE_G(integrity_error_retry_count);
+		do_failover = result_status < 0 && MEMCACHE_G(allow_failover) && i <= MEMCACHE_G(max_failover_attempts);
 		i++;
 
 	} while (do_failover || chksum_failed);
@@ -5450,8 +5450,8 @@ PHP_FUNCTION(memcache_getl)
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL, *zval_metadata = NULL;
 	int timeout = 15;
 	char metadata[MAX_METADATA_LEN + 1];
-	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata. 
-								// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0 
+	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata.
+								// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0
 								// (=0 if there is a lock error but the lock has no metadata)
 
 	mc_logger_t logData;
@@ -5480,7 +5480,7 @@ PHP_FUNCTION(memcache_getl)
 	LogManager::getLogger()->setLogName(pool->log_name);
 	LogManager::getLogger()->setCommandType(GET);
 
-	if (zval_metadata != NULL) {  
+	if (zval_metadata != NULL) {
 		if (Z_TYPE_P(zval_metadata) == IS_STRING) {
 			metadata_len = Z_STRLEN_P(zval_metadata);
 			if (metadata_len > MAX_METADATA_LEN) {
@@ -5509,8 +5509,8 @@ PHP_FUNCTION(memcache_getlMultiByKey)
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL, *zval_metadata = NULL;
 	zval *zvalue = NULL;
 	char metadata[MAX_METADATA_LEN + 1];
-	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata. 
-	// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0 
+	int metadata_len = -1;		// We set this to -1 so as to be able to return even 0 length metadata.
+	// In case of lock error, mmc_exec_getl_cmd will set the metadata_len to something >= 0
 	// (=0 if there is a lock error but the lock has no metadata)
 
 	mc_logger_t logData;
@@ -5536,7 +5536,7 @@ PHP_FUNCTION(memcache_getlMultiByKey)
 			if (!mmc_get_pool(mmc_object, &pool TSRMLS_CC) || !pool->num_servers) {
 				LogManager::getLogger()->setCode(POOL_NT_FOUND);
 				RETURN_FALSE;
-			} 
+			}
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Input was not of expected array type");
 			RETURN_FALSE;
@@ -5842,7 +5842,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 				if (Z_TYPE_PP(data) == IS_ARRAY) {
 					HashTable *value_hash;
 					value_hash = Z_ARRVAL_PP(data);
-					if (zend_hash_find(value_hash, "shardKey", sizeof("shardKey"), 
+					if (zend_hash_find(value_hash, "shardKey", sizeof("shardKey"),
 								(void **)&zvalue) == FAILURE) {
 						LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
 						continue;
@@ -5850,12 +5850,12 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);	
 					}
 
-					if (zend_hash_find(value_hash, "lockMetaData", sizeof("lockMetaData"), 
+					if (zend_hash_find(value_hash, "lockMetaData", sizeof("lockMetaData"),
 								(void **)&zvalue) == SUCCESS) {
 						mmc_prepare_key(*zvalue, lock_meta_data, &lock_meta_data_len TSRMLS_CC);	
 					}	
 
-					if (zend_hash_find(value_hash, "timeout", sizeof("timeout"), 
+					if (zend_hash_find(value_hash, "timeout", sizeof("timeout"),
 								(void **)&zvalue) == SUCCESS) {
 						if (Z_TYPE_PP(zvalue) == IS_LONG) {
 							timeout = new char[MAX_LENGTH_OF_LONG];
@@ -5866,7 +5866,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 							timeout_len = Z_STRLEN_PP(zvalue);
 						}
 					}
-				} else if (!(mmc_prepare_key(*data, shard_key, &shard_key_len TSRMLS_CC) 
+				} else if (!(mmc_prepare_key(*data, shard_key, &shard_key_len TSRMLS_CC)
 						== MMC_OK)) {	
 					add_assoc_bool(*return_value, key, 0);
 					LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
@@ -5933,7 +5933,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 		for (j=0; j<num_requests; j++) {
 			smart_str_0(&(command_line[j]));
 
-			if ((result = mmc_sendcmd(pool->requests[j], pool->requests[j]->outbuf.c, 
+			if ((result = mmc_sendcmd(pool->requests[j], pool->requests[j]->outbuf.c,
 							pool->requests[j]->outbuf.len TSRMLS_CC)) < 0) {
 				mmc_server_failure(pool->requests[j] TSRMLS_CC);
 				result_status = result;
@@ -5966,7 +5966,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 					memcpy(shard_key, tokens[tok_index].value, tokens[tok_index].length+1);
 					LogManager::setLogger(shard_key);
 
-					result = mmc_read_value(mmc, &result_key, &result_key_len, &value, 
+					result = mmc_read_value(mmc, &result_key, &result_key_len, &value,
 							&value_len, &flags, &cas TSRMLS_CC);
 
 					if (result == -2) {
@@ -5980,7 +5980,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						add_assoc_null_ex(chksum_error_retry_hash, result_key, result_key_len+1);
 						add_assoc_bool_ex(*status_array, result_key, result_key_len+1, 0);
 						efree(value);
-					} else if (result < 0) { 
+					} else if (result < 0) {
 						if (result_key) {
 							free(result_key);
 						}
@@ -5988,13 +5988,13 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						tokens[tok_index].value[tokens[tok_index].length] = 0;
 						add_assoc_bool_ex(*status_array, tokens[tok_index].value, tokens[tok_index].length+1, 0);
 
-						if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf), 
+						if (mmc_str_left(mmc->inbuf, "LOCK_ERROR", strlen(mmc->inbuf),
 									sizeof("LOCK_ERROR")-1)) {
 							char *metadata_start = mmc->inbuf + (sizeof("LOCK_ERROR ") - 1);
 							int metadata_len = strlen(mmc->inbuf) - (sizeof("LOCK_ERROR \r\n") - 1);
 							LogManager::getLogger()->setCode(MC_LOCK_ERROR);	
 							if (metadata_len > 0 && return_metadata) {
-								add_assoc_stringl_ex(return_metadata, tokens[tok_index].value, tokens[tok_index].length + 1, 
+								add_assoc_stringl_ex(return_metadata, tokens[tok_index].value, tokens[tok_index].length + 1,
 										metadata_start, metadata_len, 1);
 							}
 						} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf),
@@ -6008,14 +6008,14 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						tok_index++;
 						result = 0;
 						continue;
-					} else if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || 
+					} else if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 ||
 							!mmc_str_left(mmc->inbuf, "END", response_len, sizeof ("END") - 1)) {
 						mmc_server_seterror(mmc, "Malformed END line", 0);
 						LogManager::getLogger()->setCode(MC_MALFORMD);
 						if (result_key) {
 							free(result_key);
 						}
-						result = -1; 
+						result = -1;
 						break;
 					} else if (flags & (MMC_SERIALIZED | MMC_SERIALIZED_IGBINARY)) {
 						zval *result;
@@ -6041,7 +6041,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 					LogManager::getLogger(result_key)->setFlags(flags);
 					LogManager::getLogger(result_key)->setCas(cas); 		
 
-					zend_hash_find(Z_ARRVAL_P(zkeys), tokens[tok_index].value, tokens[tok_index].length+1, 
+					zend_hash_find(Z_ARRVAL_P(zkeys), tokens[tok_index].value, tokens[tok_index].length+1,
 							(void **)&zvalue);
 					if (Z_TYPE_PP(data) == IS_ARRAY) {
 						zend_hash_find(Z_ARRVAL_PP(zvalue), "shardKey", sizeof("shardKey"), (void **)&zshard);
@@ -6088,7 +6088,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 			smart_str_free(&(command_line[j]));
 		}
 
-		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 && 
+		chksum_failed = zend_hash_num_elements(Z_ARRVAL_P(chksum_error_retry_hash)) > 0 &&
 			++retry_count < MEMCACHE_G(integrity_error_retry_count);
 		i++;
 	} while (chksum_failed);
@@ -6166,7 +6166,7 @@ static void php_mmc_unlock(mmc_pool_t *pool, zval *zkey, unsigned long cas, INTE
 		zend_hash_del(Z_ARRVAL_P(pool->cas_array), (char *)key, key_len + 1);
 }
 
-void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_array,INTERNAL_FUNCTION_PARAMETERS) 
+void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_array,INTERNAL_FUNCTION_PARAMETERS)
 {
 	mmc_t *mmc;
 	HashTable *key_hash;
@@ -6213,7 +6213,7 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 			if (Z_TYPE_PP(data) == IS_ARRAY) {
 				HashTable *value_hash;
 				value_hash = Z_ARRVAL_PP(data);
-				if (zend_hash_find(value_hash, "shardKey", sizeof("shardKey"), 
+				if (zend_hash_find(value_hash, "shardKey", sizeof("shardKey"),
 							(void **)&zvalue) == FAILURE) {
 					zend_hash_move_forward(key_hash);
 					LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
@@ -6222,7 +6222,7 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 					mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);	
 				}	
 
-				if (zend_hash_find(value_hash, "cas", sizeof("cas"), 
+				if (zend_hash_find(value_hash, "cas", sizeof("cas"),
 							(void **)&zvalue) == SUCCESS) {
 					if (Z_TYPE_PP(data) == IS_LONG) {
 						cas_len = sprintf(cas, "%d", Z_LVAL_PP(zvalue));
@@ -6232,10 +6232,10 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 					}
 				}
 			} else if (!(mmc_prepare_key(*data, shard_key, &shard_key_len
-					TSRMLS_CC) == MMC_OK)) {  
+					TSRMLS_CC) == MMC_OK)) {
 				add_assoc_bool(*status_array, key, 0);
 				LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
-				continue;   
+				continue;
 			}
 
 			if ((mmc = mmc_pool_find(pool, shard_key, shard_key_len TSRMLS_CC)) != NULL
@@ -6299,7 +6299,7 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 		smart_str_0(&(pool->requests[j]->outbuf));
 		smart_str_0(&(command_line[j]));
 
-		if ((result = mmc_sendcmd(pool->requests[j], pool->requests[j]->outbuf.c, 
+		if ((result = mmc_sendcmd(pool->requests[j], pool->requests[j]->outbuf.c,
 						pool->requests[j]->outbuf.len TSRMLS_CC)) < 0) {
 			mmc_server_failure(pool->requests[j] TSRMLS_CC);
 			update_result_array(&(*status_array), command_line[j].c, WRITE_TO_SERVER_FAILED);
@@ -6326,13 +6326,13 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 
 				if (mmc_str_left(mmc->inbuf,"UNLOCKED", response_len, sizeof("UNLOCKED") - 1)) {
 					LogManager::getLogger()->setCode(MC_UNLOCKED);
-					add_assoc_bool_ex(*status_array, tokens[tok_index].value, 
+					add_assoc_bool_ex(*status_array, tokens[tok_index].value,
 							tokens[tok_index].length + 1, 1);
 				} else {
 					LogManager::getLogger()->setCode(CMD_FAILED);
-					add_assoc_bool_ex(*status_array, tokens[tok_index].value, 
+					add_assoc_bool_ex(*status_array, tokens[tok_index].value,
 							tokens[tok_index].length + 1, 0);
-				} 
+				}
 				tok_index++;
 			} while (tok_index < ntokens);
 
