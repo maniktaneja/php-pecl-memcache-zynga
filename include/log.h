@@ -31,20 +31,20 @@ enum syslogType {PECL_TYPE=LOG_LOCAL4|LOG_DEBUG, APACHE_TYPE=LOG_LOCAL5|LOG_DEBU
 
 class logOutPut {
 public:
-   virtual int open(const char *logFile) = 0; 
+   virtual int open(const char *logFile) = 0;
    virtual void close() = 0;
    virtual int write(const char *fmt, ...) = 0;
 };
 
 class fileOut : public logOutPut {
 public:
-   int open(const char *logFile); 
+   int open(const char *logFile);
    void close();
    int write(const char *fmt, ...);
     fileOut():logFd(-1),logMode(ERRORLOG_FILE) {
     }
 private:
-    int logFd;   
+    int logFd;
     int logMode;
 };
 
@@ -52,15 +52,15 @@ class syslogOut : public logOutPut {
 public:
     syslogOut():type(PECL_TYPE) {
     };
-    
+
     syslogOut(syslogType t):type(t) {
     };
 
-   int open(const char *p); 
+   int open(const char *p);
    void close();
    int write(const char *fmt, ...);
 private:
    syslogType type;
 };
 
-#endif 
+#endif

@@ -10,7 +10,7 @@ if ($memcache) {
     $cas = 0;
     $test = $memcache->get2($key, $val, $flag);
     var_dump($test); // true if call succeeded. false if any error happened during the call, like network error etc. Check the remaining values below only if this value is true.
-    var_dump($key);  
+    var_dump($key);
     var_dump($val);  // value if it exists, NULL otherwise.
     var_dump($flag); // flag if value exists, uninitialized junk otherwise
 } else {

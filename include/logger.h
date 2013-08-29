@@ -25,7 +25,7 @@ limitations under the License.
 
 enum field_type {INVAL, STRING, NUMBER};
 enum cmdType {OTHERS = 0, GET, SET};
-class RequestLogger; 
+class RequestLogger;
 class logOutPut;
 struct mc_logger;
 struct LoggerData;
@@ -55,51 +55,51 @@ protected:
         __TN__(unsigned int,  res_time, "restime", NUMBER)  \
         __TN__(unsigned int,  res_len, "reslen", NUMBER)    \
         __TN__(unsigned int,  serial_time, "sertime", NUMBER) \
-        __TN__(unsigned int,  expiry, "expiry", NUMBER)    
+        __TN__(unsigned int,  expiry, "expiry", NUMBER)
 
-#define __TN__(a,b,c,d) a b; 
+#define __TN__(a,b,c,d) a b;
 typedef struct mc_logger : public Timer {
     RULE_FIELDS
 
     void setHost(char *ln) {
         host = ln;
     }
- 
+
     void setKey(const char *ln) {
         key = (char *)ln;
-    } 
+    }
 
     char *getKey() {
         return key;
-    } 
+    }
 
     void setCmd(char *ln) {
         command = ln;
     }
- 
+
     void setFlags(int ln) {
         flags = ln;
-    } 
+    }
 
     void setCode(int ln) {
         res_code = ln;
     }
- 
+
     int getCode() {
         return res_code;
     }
 
     void setResTime(unsigned int ln) {
         res_time = ln;
-    } 
+    }
 
     void setResLen(int ln) {
         res_len = ln;
-    } 
+    }
 
     void setLogName(char *ln) {
         log_name = ln;
-    } 
+    }
 
     void setCas(unsigned long c) {
         cas = c;
@@ -112,7 +112,7 @@ typedef struct mc_logger : public Timer {
     void stopSerialTime() {
         timeStruct endTime;
         recordTime(&endTime);
-        serial_time = diffTime(startTime, endTime); 
+        serial_time = diffTime(startTime, endTime);
     }
 
     void setExpiry(unsigned int exp) {
@@ -160,7 +160,7 @@ public:
         }
         recordTime(&startTime);
         otherTime =
-        getTime = 
+        getTime =
         setTime = 0;
     }
 
@@ -173,8 +173,8 @@ public:
 
     void setLogOutPut(logOutPut *f) {
         enabled = true;
-        out = f;        
-    }   
+        out = f;
+    }
 
     void flushConfig() {
         enabled = false;
@@ -199,8 +199,8 @@ private:
     }
 
     void publishApacheRecord(char *uri) {
-        if (out) { 
-            out->write("%s %lu %lu %lu %d %.1024s", getID().c_str(), getTime, setTime, 
+        if (out) {
+            out->write("%s %lu %lu %lu %d %.1024s", getID().c_str(), getTime, setTime,
                     getTime+setTime+otherTime, diffTime(startTime, endTime), uri);
         }
     }
@@ -209,8 +209,8 @@ private:
     timeStruct startTime, endTime;
     std::ostringstream id;
     unsigned long count, getTime, setTime, otherTime, pid;
-    static bool enabled;  
-    logOutPut *out;  
+    static bool enabled;
+    logOutPut *out;
 };
 
 struct LoggerData {
@@ -243,22 +243,22 @@ public:
             cleanData(n);
             (*kl)[key] = n;
             n->setKey(strdup(key));
-        } 
+        }
     }
 
     static inline mc_logger_t *getLogger(const char *key) {
         keyLoggerMap_t::iterator it = kl->find(key);
-        if (it != kl->end()) {           
+        if (it != kl->end()) {
             return it->second;
         } else {
             return val;
-        } 
+        }
     }
 
     static inline void setLogger(const char *key) {
         if (kl) {
             keyLoggerMap_t::iterator it = kl->find(key);
-            if (it != kl->end()) {           
+            if (it != kl->end()) {
                 val = it->second;
             }
         }
@@ -300,9 +300,9 @@ public:
     }
 
     static const char *checkAndLoadConfig(char *file_path);
-    static bool statConfigNotChanged(char *file); 
-    static void logPublishRecord(mc_logger_t *d);   
- 
+    static bool statConfigNotChanged(char *file);
+    static void logPublishRecord(mc_logger_t *d);
+
 private:
 
     static void cleanData(mc_logger_t *v) {
@@ -310,18 +310,18 @@ private:
         v->setLogName("unassigned");
     }
 
-    static keyLoggerMap_t *kl; 
-    static mc_logger_t *val;   
+    static keyLoggerMap_t *kl;
+    static mc_logger_t *val;
     timeStruct startTime, endTime;
 };
 
 
 //request codes
 #define MC_SUCCESS              0x0
-#define MC_STORED               0x1  
-#define MC_UNLOCKED             200 
+#define MC_STORED               0x1
+#define MC_UNLOCKED             200
 #define MC_DELETED              201
- 
+
 #define MC_NOT_STORED           0x2
 #define MC_NOT_FOUND            0x3
 #define MC_EXISTS               0x4
@@ -332,36 +332,36 @@ private:
 #define MC_CLNT_ERROR           0x9
 #define MC_SERVER_ERROR         0x10
 #define MC_MALFORMD             0x12
-#define MC_ONLY_END             0x13    
+#define MC_ONLY_END             0x13
 #define MC_NON_NUMERIC_VALUE    0x14
 
-#define INTERNAL_ERROR            100      
-#define PROXY_CONNECT_FAILED      101  
-#define VERSION_FAILED            102  
-#define POOL_NT_FOUND             103  
-#define SVR_NT_FOUND              104  
-#define READLINE_FAILED           105  
-#define SVR_OPN_FAILED            106  
-#define COMPRESS_FAILED           107  
-#define PARSE_ERROR               108  
-#define PREPARE_KEY_FAILED        109  
-#define INVALID_CB                110  
-#define INVALID_PARAM             111  
-#define INVALID_CAS               112  
-#define UNLOCKED_FAILED           113  
-#define FLUSH_FAILED              114  
-#define CLOSE_FAILED              115 
-#define CMD_FAILED                116  
-#define CONNECT_FAILED            117 
-#define CRC_CHKSUM1_FAILED        118 
-#define CRC_CHKSUM2_FAILED        119 
-#define CRC_CHKSUM3_FAILED        120 
+#define INTERNAL_ERROR            100
+#define PROXY_CONNECT_FAILED      101
+#define VERSION_FAILED            102
+#define POOL_NT_FOUND             103
+#define SVR_NT_FOUND              104
+#define READLINE_FAILED           105
+#define SVR_OPN_FAILED            106
+#define COMPRESS_FAILED           107
+#define PARSE_ERROR               108
+#define PREPARE_KEY_FAILED        109
+#define INVALID_CB                110
+#define INVALID_PARAM             111
+#define INVALID_CAS               112
+#define UNLOCKED_FAILED           113
+#define FLUSH_FAILED              114
+#define CLOSE_FAILED              115
+#define CMD_FAILED                116
+#define CONNECT_FAILED            117
+#define CRC_CHKSUM1_FAILED        118
+#define CRC_CHKSUM2_FAILED        119
+#define CRC_CHKSUM3_FAILED        120
 #define CRC_CHKSUM4_FAILED        121
-#define CRC_CHKSUM5_FAILED        122 
-#define CRC_CHKSUM6_FAILED        123 
-#define CRC_CHKSUM7_FAILED        124 
-#define READ_VALUE_FAILED         125 
-#define UNCOMPRESS_FAILED         126 
+#define CRC_CHKSUM5_FAILED        122
+#define CRC_CHKSUM6_FAILED        123
+#define CRC_CHKSUM7_FAILED        124
+#define READ_VALUE_FAILED         125
+#define UNCOMPRESS_FAILED         126
 #define PARSE_RESPONSE_FAILED     127
 #define CODE_NOT_USED              128
 #define DI_CHECKSUM_GET_FAILED_GETL 129
@@ -376,7 +376,7 @@ private:
 #define DI_CHECKSUM_GET_FAILED_MOXI     137
 #define DI_CHECKSUM_SET_FAILED      138
 #define DI_CHECKSUM_GET_FAILED_BYKEY  139
-#define WRITE_TO_SERVER_FAILED  140            
+#define WRITE_TO_SERVER_FAILED  140
 #define UNSERIALIZE_FAILED      141
 #define VALUE_NOT_FOUND         142
 #define NOT_STRING_DATA         143
@@ -387,20 +387,20 @@ private:
 #if 0
 request error_code
 critical               0x0f
-connect failed         0x01     
+connect failed         0x01
 read stream failed     0x02
-write stream failed    0x04 
+write stream failed    0x04
 
-warning:               0xf0 
-end line               0x10 
-not found              0x20 
-temorary failure       0x40 
-lock error             0x80 
+warning:               0xf0
+end line               0x10
+not found              0x20
+temorary failure       0x40
+lock error             0x80
 
-success                0x00 
+success                0x00
 #endif
 
 //current commands add/set/cas/get
 //read config from file and set the log on the basis of rules.
 //parse config only if logging is enabled.
-//adding a validator 
+//adding a validator

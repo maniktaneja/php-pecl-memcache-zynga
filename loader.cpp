@@ -23,7 +23,7 @@ limitations under the License.
 #define DEFAULT_APACHE_LOG_NAME "apacheRequestLog"
 
 std::string errorString;
-static mc_logger_t record; 
+static mc_logger_t record;
 std::stack<LoggerData *> loggerStack;
 mc_logger_t *LogManager::val = NULL;
 keyLoggerMap_t *LogManager::kl = NULL;
@@ -32,14 +32,14 @@ bool LogManager::statConfigNotChanged(char *file) {
     static struct stat fileStat;
     static time_t lastTime;
     stat(file, &fileStat);
-    LOG("ctime is %d mitme is %d lastime %d", fileStat.st_ctime, 
+    LOG("ctime is %d mitme is %d lastime %d", fileStat.st_ctime,
         fileStat.st_ctime, lastTime);
     if (fileStat.st_ctime != lastTime) {
         LOG("config changed");
         lastTime = fileStat.st_ctime;
         return false;
-    } 
-    return true; 
+    }
+    return true;
 }
 
 const char *LogManager::checkAndLoadConfig(char *p) {
@@ -48,7 +48,7 @@ const char *LogManager::checkAndLoadConfig(char *p) {
     }
     /*flush old config*/
     logger::instance()->flushConfig();
-    RequestLogger::instance()->flushConfig(); 
+    RequestLogger::instance()->flushConfig();
 
     if (p == NULL) {
         LOG("config file is NULL");
@@ -63,7 +63,7 @@ const char *LogManager::checkAndLoadConfig(char *p) {
         while (configFile.good()) {
             apacheLog = false;
             getline(configFile, str);
-            if (sscanf(str.c_str(), "%s", 
+            if (sscanf(str.c_str(), "%s",
                         mcMaxName) > 0) {
                 exprParser *ptr = NULL;
                 LOG("client name is %s", mcMaxName);
@@ -79,14 +79,14 @@ const char *LogManager::checkAndLoadConfig(char *p) {
                         else {
                             errorString += "Invalid rule";
                             errorString += str;
-                            errorString += "\n";  
+                            errorString += "\n";
                         }
-                    } 
-                    else { 
+                    }
+                    else {
                         ptr = new exprParser(str);
                         if (!ptr->buildTree()) {
                             errorString += str;
-                            errorString += "\n"; 
+                            errorString += "\n";
                             delete ptr;
                             ptr = NULL;
                         }
@@ -98,7 +98,7 @@ const char *LogManager::checkAndLoadConfig(char *p) {
                             }
                         }
                     }
-                }  
+                }
                 getline(configFile, str);
                 if (ptr || apacheLog) {
                     if (str.size() > 0) {
@@ -108,30 +108,30 @@ const char *LogManager::checkAndLoadConfig(char *p) {
                         }
                         else {
                             p = new fileOut();
-                        } 
-                        if (!p->open(str.c_str())) { 
+                        }
+                        if (!p->open(str.c_str())) {
                             if (apacheLog) {
                                 LOG("inside the logger");
                                 RequestLogger::instance()->setLogOutPut(p);
                             }
                             else {
-                                ptr->setLogOutPut(p); 
+                                ptr->setLogOutPut(p);
                             }
                         }
                         else {
                             free(p);
                             std::string nf("Not able to open the file : ");
-                            errorString += nf;  
-                            errorString += str;  
-                            errorString += "\n";  
+                            errorString += nf;
+                            errorString += str;
+                            errorString += "\n";
                             LOG("unable to open the log file %s", str.c_str());
-                        }   
+                        }
                     } else {
                         std::string nf("Not a valid log output \n");
-                        errorString += nf;  
-                    }                
+                        errorString += nf;
+                    }
                 }
-            }      
+            }
         }
     }
     return errorString.size() > 0 ? errorString.c_str():NULL;
@@ -144,12 +144,12 @@ void LogManager::logPublishRecord(mc_logger_t *d) {
     }
     if ((exPar = logger::instance()->getExprTree(d->log_name)) &&
             exPar->evaluateTree((data *)d, exPar->getRoot())) {
-        logOutPut *p = NULL; 
-        LOG("Rule evaluated to true");   
+        logOutPut *p = NULL;
+        LOG("Rule evaluated to true");
         if ((p = exPar->getLogOutPut())) {
-            LOG("Writing to output");  
-            p->write("%s %s %s %s %s %d %d %d %d %llu %d %d", d->log_name, d->host, 
-                RequestLogger::instance()->getID().c_str(), d->command, d->key, d->res_len, d->res_code, 
+            LOG("Writing to output");
+            p->write("%s %s %s %s %s %d %d %d %d %llu %d %d", d->log_name, d->host,
+                RequestLogger::instance()->getID().c_str(), d->command, d->key, d->res_len, d->res_code,
                 d->flags, d->expiry, d->cas, d->res_time, d->serial_time);
         }
     }

@@ -105,7 +105,7 @@ void mmc_queue_copy(mmc_queue_t *source, mmc_queue_t *target) {
 	target->len = source->len;
 }
 
-void mmc_queue_remove(mmc_queue_t *queue, void *ptr) { 
+void mmc_queue_remove(mmc_queue_t *queue, void *ptr) {
 	void *item;
 	mmc_queue_t original = *queue;
 	mmc_queue_release(queue);

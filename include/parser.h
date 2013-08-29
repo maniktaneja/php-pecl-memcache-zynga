@@ -43,17 +43,17 @@ class data : public mc_logger_t
 
 class opr {
 public:
-    virtual bool eval(int a, int b) {} 
-    virtual bool eval(char *a, std::string b) {}; 
+    virtual bool eval(int a, int b) {}
+    virtual bool eval(char *a, std::string b) {};
     oprType opt;
-    bool strType;     
+    bool strType;
 };
 
 class eq : public opr {
 public:
     eq() {
         opt = EQ;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         LOG("inside eq");
@@ -65,7 +65,7 @@ class ctn : public opr {
 public:
     ctn() {
         opt = CTN;
-        strType = true ;    
+        strType = true ;
     }
     bool eval(char *a, std::string b) {
         if (!a) {
@@ -80,7 +80,7 @@ class gt : public opr {
 public:
     gt() {
         opt = GT;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return a > b;
@@ -91,7 +91,7 @@ class lt : public opr {
 public:
     lt() {
         opt = LT;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return a < b;
@@ -102,7 +102,7 @@ class ad : public opr {
 public:
     ad() {
         opt = AND;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return a & b;
@@ -113,7 +113,7 @@ class bs : public opr {
 public:
     bs() {
         opt = BrcsStr;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return false;
@@ -124,7 +124,7 @@ class be : public opr {
 public:
     be() {
         opt = BrcsStp;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return false;
@@ -135,7 +135,7 @@ class oor : public opr {
 public:
     oor() {
         opt = OR;
-        strType = false;    
+        strType = false;
     }
     bool eval(int a, int b) {
         return a | b;
@@ -146,7 +146,7 @@ class s_EQ : public opr {
 public:
     s_EQ() {
         opt = SEQ;
-        strType = true;    
+        strType = true;
     }
     bool eval(char *a, std::string b) {
         if (!a) {
@@ -160,7 +160,7 @@ class pm : public opr {
 public:
     pm() {
         opt = PM;
-        strType = true;    
+        strType = true;
     }
     bool eval(char *a, std::string b) {
         if (!a) {
@@ -177,16 +177,16 @@ public:
     genNode() {
         left = right = NULL;
         op = NULL;
-    } 
+    }
     ~genNode() {
         delete op;
-    }  
+    }
     virtual int evaluate(int a, int b) {}
     virtual int evaluate(data *d, leaf *left, leaf *right) {}
     virtual int shortcircuit(bool result) {}
     genNode *left;
     genNode *right;
-    opr * op;    
+    opr * op;
     std::string str;
 };
 
@@ -194,9 +194,9 @@ class leaf : public genNode {
 public:
     leaf(std::string &p, tokenType &tp) {
         str.assign(p);
-        val = atoi(p.c_str());    
+        val = atoi(p.c_str());
         leafType = tp;
-        opndType = INVAL; 
+        opndType = INVAL;
     }
 
     leaf(off_t t, field_type ot, tokenType tp) {
@@ -206,7 +206,7 @@ public:
     }
     int getInt() {
         return val;
-    }  
+    }
     std::string & getString() {
         return str;
     }
@@ -220,12 +220,12 @@ public:
         return leafType;
     }
 private:
-    field_type opndType; 
+    field_type opndType;
     int val;
     off_t off;
 protected:
     tokenType leafType;
-}; 
+};
 
 #define GET_VALUE(d,offset,type) *((type *)((char *)d + offset))
 
@@ -237,8 +237,8 @@ public:
 
     int evaluate(int left, int right) {
         return op->eval(left, right);
-    } 
- 
+    }
+
     int evaluate(data *d, leaf *left, leaf *right) {
         if (op->strType) {
             return op->eval(GET_VALUE(d, left->getOffset(), char *), right->getString());
@@ -247,11 +247,11 @@ public:
             return op->eval(GET_VALUE(d, left->getOffset(), int), right->getInt());
         }
     }
-    
+
     int shortcircuit(bool result) {
-        return result ? op->opt == OR : op->opt == AND; 
+        return result ? op->opt == OR : op->opt == AND;
     }
-}; 
+};
 
 class exprParser {
 public:
@@ -272,7 +272,7 @@ public:
         return root;
     }
     void setLogOutPut(logOutPut *p) {
-        out = p;    
+        out = p;
     }
     logOutPut *getLogOutPut() {
         return out;
@@ -291,7 +291,7 @@ private:
     std::string str;
     std::vector<std::string> strs;
     std::vector<std::string>::iterator itr;
-    logOutPut *out; 
+    logOutPut *out;
 };
 
 class logger {
@@ -304,7 +304,7 @@ public:
         return ins;
     }
     bool insertExprTree(std::string mc, exprParser *p) {
-        std::map<std::string, exprParser *> :: iterator it; 
+        std::map<std::string, exprParser *> :: iterator it;
         if ((it = exprMap.find(mc)) != exprMap.end()) {
             LOG("duplicate mc value %s, so returning", mc.c_str());
             return false;
@@ -313,7 +313,7 @@ public:
         return true;
     }
     exprParser *getExprTree(std::string mc) {
-        std::map<std::string, exprParser *> :: iterator it; 
+        std::map<std::string, exprParser *> :: iterator it;
         if ((it = exprMap.find(mc)) == exprMap.end()) {
             return NULL;
         }
@@ -321,7 +321,7 @@ public:
     }
     void flushConfig() {
         std::map<std::string, exprParser *> :: iterator itr;
-        itr = exprMap.begin(); 
+        itr = exprMap.begin();
         while (itr != exprMap.end()) {
             delete itr->second;
             exprMap.erase(itr++);
