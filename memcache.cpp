@@ -1015,7 +1015,7 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 	if (pool->enable_checksum != 0) {
 		mmc->di_algo_in_use = mmc->data_integrity_algo;
 	}
-	else {	
+	else {
 		// The pool settings say checksum are off, the final settings will be OFF or unsupported,
 		// depending on what the downstream says
 		if (mmc->data_integrity_algo == DI_CHKSUM_UNSUPPORTED) {
@@ -1024,7 +1024,7 @@ mmc_t * mmc_pool_find(mmc_pool_t *pool, const char *key, int key_len) {
 		else {
 			mmc->di_algo_in_use = DI_CHKSUM_SUPPORTED_OFF;
 		}
-	}	
+	}
 	MMC_DEBUG(("Pool says checksums = %d, downstream says %d final answer %d \n", pool->enable_checksum,
 		mmc->data_integrity_algo, mmc->di_algo_in_use));
 	return mmc;
@@ -1368,7 +1368,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 	char crc_in_val[MAX_CRC_BUF] = {0};
 	int retry_count = 0;
 	int len_crc_in_hdr = 0, len_crc_in_val = 0, cas_key_len = 0;
-	char *cas_key = NULL;	
+	char *cas_key = NULL;
 
 	MMC_DEBUG(("mmc_pool_store: key '%s' len '%d'", key, key_len));
 
@@ -1396,20 +1396,20 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			if (shard_key_len > MMC_KEY_MAX_SIZE) {
 				shard_key = shard_key_copy = estrndup(shard_key, MMC_KEY_MAX_SIZE);
 				shard_key_len = MMC_KEY_MAX_SIZE;
-			}	
+			}
 			cas_key = new char[shard_key_len+key_len+1];
-			memcpy(cas_key, key, key_len);		
-			memcpy(cas_key+key_len, shard_key, shard_key_len+1);		
+			memcpy(cas_key, key, key_len);
+			memcpy(cas_key+key_len, shard_key, shard_key_len+1);
 			cas_key_len = key_len+shard_key_len+1;
 		} else {
 			cas_key = (char *)key;
 			cas_key_len = key_len+1;
 		}
-		
+
 		/* autocompress large values */
 		/* skip compression when the command is either append or prepend */
 		if (!(strncmp(command, "append", command_len) && strncmp(command, "prepend", command_len))) {
-			flags = 0;	
+			flags = 0;
 		} else if (pool->compress_threshold && value_len >= pool->compress_threshold &&
 				!(flags & (MMC_COMPRESSED | MMC_COMPRESSED_LZO | MMC_COMPRESSED_BZIP2))) {
 			flags |= (MEMCACHE_G(compression_level) > 0)? MMC_COMPRESSED: MMC_COMPRESSED_LZO;
@@ -1554,7 +1554,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 			// We will retry the set
 		}while(result == -2 && ++retry_count < MEMCACHE_G(integrity_error_retry_count));
 
-		
+
 		if (result < 0) {
 			if (result == -2) {
 				LogManager::getLogger()->setCode(DI_CHECKSUM_SET_FAILED);
@@ -1565,7 +1565,7 @@ int mmc_pool_store(mmc_pool_t *pool, const char *command, int command_len, const
 				mmc_server_failure(mmc TSRMLS_CC);
 			}
 		}
-		
+
 		if (key_copy != NULL) {
 			efree(key_copy);
 		}
@@ -2001,6 +2001,8 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 {
 	char *response;
 	size_t response_len;
+	int retry_count = 0;
+	char buffer[100] = {0};
 
 	php_stream *stream = mmc->proxy? mmc->proxy->stream: mmc->stream;
 	if (stream == NULL) {
@@ -2008,18 +2010,29 @@ static int mmc_readline(mmc_t *mmc TSRMLS_DC) /* {{{ */
 		return -1;
 	}
 
-	response = php_stream_get_line(stream, ZSTR(mmc->inbuf), MMC_BUF_SIZE, &response_len);
+	/*
+	 * we have seen that php_stream_get_line sometimes returns with null value even if the
+	 * connection is still valid. to workaround this we retry reading from the socket
+	 * three times before giving up
+	 */
+	while (retry_count++ < 3) {
+		response = php_stream_get_line(stream, ZSTR(mmc->inbuf), MMC_BUF_SIZE, &response_len);
 
-
-	if (response) {
-		MMC_DEBUG(("mmc_readline: read data:"));
-		MMC_DEBUG(("mmc_readline:---"));
-		MMC_DEBUG(("%s", response));
-		MMC_DEBUG(("mmc_readline:---"));
-		return response_len;
+		if (response) {
+			MMC_DEBUG(("mmc_readline: read data:"));
+			MMC_DEBUG(("mmc_readline:---"));
+			MMC_DEBUG(("%s", response));
+			MMC_DEBUG(("mmc_readline:---"));
+			return response_len;
+		} else if (response == false) {
+			/* response will be set to false if an error has occured */
+			break;
+		}
 	}
-	
-	mmc_server_seterror(mmc, "Failed reading line from stream", 0);
+
+	snprintf(buffer, 100, "Failed reeading line from stream. Retry count %d", retry_count);
+
+	mmc_server_seterror(mmc, buffer, 0);
 	return -1;
 }
 /* }}} */
@@ -2300,7 +2313,7 @@ int mmc_exec_getl_cmd(mmc_pool_t *pool, const char *key, int key_len, zval **ret
 			/* send command and read value */
 			if ( mmc_sendcmd(mmc, command, command_len TSRMLS_CC) <=0 )
 				break;
-		
+
 			result = mmc_read_value(mmc, NULL, NULL, &value, &value_len, &flags, &cas TSRMLS_CC);
 			if (result >= 0 || result == CHKSUM_MISMATCH_DETECTED) {
 				if ((response_len = mmc_readline(mmc TSRMLS_CC)) < 0 || !mmc_str_left(mmc->inbuf, "END", response_len, sizeof("END")-1)) {
@@ -2475,7 +2488,7 @@ int mmc_exec_unl_cmd_by_key(mmc_pool_t *pool, mmc_t *mmc, const char *key, int k
 	zval **cas_lookup;
 	int cas_key_len = shard_key_len+key_len;
 	char *cas_key = new char[cas_key_len];
-	memcpy(cas_key, key, key_len-1);		
+	memcpy(cas_key, key, key_len-1);
 	memcpy(cas_key+key_len-1, shard_key, shard_key_len+1);
 
 	if (pool->cas_array && FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array),
@@ -2528,7 +2541,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 			/* send command and read value */
 			if ( mmc_sendcmd(mmc, command, command_len TSRMLS_CC) <=0 )
 				break;
-		
+
 			result = mmc_read_value(mmc, NULL, NULL, &value, &value_len, &flags, pcas TSRMLS_CC);
 			LogManager::getLogger()->setFlags(flags);
 			/* not found */
@@ -2579,7 +2592,7 @@ int mmc_exec_retrieval_cmd(mmc_pool_t *pool, const char *key, int key_len, zval 
 					ZVAL_STRINGL(*return_value, value, value_len, 0);
 				}
 				else {
-					efree(value);	
+					efree(value);
 				}
 			}
 			else {
@@ -2794,7 +2807,7 @@ static int mmc_exec_retrieval_cmd_multi(
 			zend_hash_clean(Z_ARRVAL_P(chksum_error_retry_hash));
 		}
 
-		LogManager::createLogger("TMP_KEY");	
+		LogManager::createLogger("TMP_KEY");
 		/* third pass to read responses */
 		for (j=0; j<num_requests; j++) {
 			if (pool->requests[j]->status != MMC_STATUS_FAILED) {
@@ -2804,8 +2817,8 @@ static int mmc_exec_retrieval_cmd_multi(
 					value_len = flags = result_key_len = cas = 0;
 					int free_key = 1;
 					LogManager::setLogger("TMP_KEY");
-	
-					result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, pcas TSRMLS_CC);	
+
+					result = mmc_read_value(pool->requests[j], &result_key, &result_key_len, &value, &value_len, &flags, pcas TSRMLS_CC);
 					if (result == -2) {
 						/* uncompression failed */
 						LogManager::getLogger(result_key)->setCode(UNCOMPRESS_FAILED);
@@ -2847,16 +2860,16 @@ static int mmc_exec_retrieval_cmd_multi(
 					else {
 						add_assoc_stringl_ex(*return_value, result_key, result_key_len + 1, value, value_len, 0);
 					}
-	
+
 					LogManager::getLogger(result_key)->setResLen(value_len);
                     LogManager::getLogger(result_key)->setFlags(flags);
-                    LogManager::getLogger(result_key)->setCas(cas); 				
+                    LogManager::getLogger(result_key)->setCas(cas);
 
-					if (return_flags != NULL) {						
+					if (return_flags != NULL) {
 						add_assoc_long_ex(return_flags, result_key, result_key_len + 1, flags);
 					}
 
-					if (return_cas != NULL) {						
+					if (return_cas != NULL) {
 						add_assoc_long_ex(return_cas, result_key, result_key_len + 1, cas);
 					}
 
@@ -2896,7 +2909,7 @@ static int mmc_exec_retrieval_cmd_multi(
 		zval *value;
 		char *key;
 		int flag;
-		
+
 		while ((value = (zval *)mmc_queue_pop(&serialized)) != NULL) {
 			key = (char *)mmc_queue_pop(&serialized_key);
 			LogManager::setLogger(key);
@@ -3102,7 +3115,7 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 			LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED1);
 			return CHKSUM_MISMATCH_DETECTED;
 		}
-		
+
 		int cnt = sscanf(chksum, "%x:", &chksum_metadata);
 		// We dont get the metadata of the checksum
 		if (cnt < 1) {
@@ -3162,13 +3175,13 @@ static int mmc_read_value(mmc_t *mmc, char **key, int *key_len, char **value, in
 
 				case DI_CHKSUM_MISMATCH_MCMUX:
 					LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED_MCMUX);
-					break;	
+					break;
 				case DI_CHKSUM_MISMATCH_MB:
 					LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED_MB);
-					break;	
+					break;
 				case DI_CHKSUM_MISMATCH_MOXI:
 					LogManager::getLogger()->setCode(DI_CHECKSUM_GET_FAILED_MOXI);
-					break;	
+					break;
 			}
 			return CHKSUM_MISMATCH_DETECTED;
 		}
@@ -4006,7 +4019,7 @@ PHP_FUNCTION(memcache_add_server)
 	zend_bool use_binary = 0;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("addServer");
 
 	if (mmc_object) {
@@ -4529,7 +4542,7 @@ PHP_FUNCTION(memcache_get2)
 	zval *zkey, *zvalue, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	char key[MMC_KEY_MAX_SIZE];
 
 	LogManager::getLogger()->setCmd("get2");
@@ -4742,7 +4755,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 
 	// Go through all of the key => value pairs and send the request without waiting for the responses just yet for performance improvements
 	for (zend_hash_internal_pointer_reset(key_hash); zend_hash_has_more_elements(key_hash) == SUCCESS; zend_hash_move_forward(key_hash)) {
-		
+
 		LogManager lm(&logData);
 		char *input_key;
 		unsigned int input_key_len;
@@ -4836,7 +4849,7 @@ static void php_mmc_store_multi_by_key(zval *mmc_object, zval *zkey_array, char 
 		LogManager::getLogger()->setCmd(multi_cmd);
 	}
 
-	mmc_free_multi(TSRMLS_C);	
+	mmc_free_multi(TSRMLS_C);
 	FREE_ZVAL(tmp);
 	MMC_DEBUG(("php_mmc_store_multi_by_key: Exit"));
 }
@@ -4864,7 +4877,7 @@ PHP_FUNCTION(memcache_getByKey)
 	zval *cas = NULL;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	char key[MMC_KEY_MAX_SIZE];
 
 	LogManager::getLogger()->setCmd("getBykey");
@@ -5219,7 +5232,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 				MMC_DEBUG(("Problem with the key"));
 				continue;
 			}
-			
+
 			LogManager::createLogger(key);
 			LogManager::setLogger(key);
 			LogManager::getLogger()->setCmd("getMultiByKey");
@@ -5286,7 +5299,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 					if (mmc) {
 						LogManager::getLogger()->setHost(mmc->host);
 					} else {
-						LogManager::getLogger()->setHost(PROXY_STR);			
+						LogManager::getLogger()->setHost(PROXY_STR);
 					}
 					LogManager::getLogger()->setCode(CONNECT_FAILED);
 				}
@@ -5373,7 +5386,7 @@ static void php_mmc_get_multi_by_key(mmc_pool_t *pool, zval *zkey_array, zval **
 						LogManager::setLogger(result_key);
 						LogManager::getLogger()->setResLen(value_len);
 						LogManager::getLogger()->setFlags(flags);
-						LogManager::getLogger()->setCas(cas);	
+						LogManager::getLogger()->setCas(cas);
 
 						add_assoc_bool(*value_array, "status", 1);
 						add_assoc_long_ex(*value_array, "flag", sizeof("flag"), flags);
@@ -5456,7 +5469,7 @@ PHP_FUNCTION(memcache_getl)
 
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("getl");
 
 	if (mmc_object == NULL) {
@@ -5709,7 +5722,7 @@ PHP_FUNCTION(memcache_get)
 	zval *zkey, *mmc_object = getThis(), *flags = NULL, *cas = NULL;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	zval **data;
 	bool return_corrupted = false;
 	char key[MMC_KEY_MAX_SIZE];
@@ -5820,14 +5833,14 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 
 		for (zend_hash_internal_pointer_reset(key_hash);zend_hash_has_more_elements(key_hash) == SUCCESS;
 				zend_hash_move_forward(key_hash)) {
-			ulong idx;	
+			ulong idx;
 			char *timeout = "15";
 			timeout_len = sizeof("15")-1;
 			lock_meta_data_len = 0;
 			if (zend_hash_get_current_key_ex(key_hash, &key, &key_len,
 						&idx, 0, NULL) == HASH_KEY_IS_STRING) {
 				bool free_timeout = false;
-				zval **zvalue;	
+				zval **zvalue;
 				LogManager::createLogger(key);
 				LogManager::setLogger(key);
 				LogManager::getLogger()->setCmd("getlMultiByKey");
@@ -5836,7 +5849,7 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 				if (zend_hash_get_current_data(key_hash, (void **)&data) == FAILURE) {
 					add_assoc_bool(*return_value, key, 0);
 					LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
-					continue;	
+					continue;
 				}
 
 				if (Z_TYPE_PP(data) == IS_ARRAY) {
@@ -5847,30 +5860,30 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
 						continue;
 					} else {
-						mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);	
+						mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);
 					}
 
 					if (zend_hash_find(value_hash, "lockMetaData", sizeof("lockMetaData"),
 								(void **)&zvalue) == SUCCESS) {
-						mmc_prepare_key(*zvalue, lock_meta_data, &lock_meta_data_len TSRMLS_CC);	
-					}	
+						mmc_prepare_key(*zvalue, lock_meta_data, &lock_meta_data_len TSRMLS_CC);
+					}
 
 					if (zend_hash_find(value_hash, "timeout", sizeof("timeout"),
 								(void **)&zvalue) == SUCCESS) {
 						if (Z_TYPE_PP(zvalue) == IS_LONG) {
 							timeout = new char[MAX_LENGTH_OF_LONG];
 							timeout_len = sprintf(timeout, "%d", Z_LVAL_PP(zvalue));
-							free_timeout = true;	
+							free_timeout = true;
 						} else if (Z_TYPE_PP(zvalue) == IS_STRING) {
 							timeout = Z_STRVAL_PP(zvalue);
 							timeout_len = Z_STRLEN_PP(zvalue);
 						}
 					}
 				} else if (!(mmc_prepare_key(*data, shard_key, &shard_key_len TSRMLS_CC)
-						== MMC_OK)) {	
+						== MMC_OK)) {
 					add_assoc_bool(*return_value, key, 0);
 					LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
-					continue;	
+					continue;
 				}
 
 				if (!i || chksum_failed && zend_hash_exists(Z_ARRVAL_P(chksum_error_retry_hash),
@@ -5974,8 +5987,8 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 						if (status_array) {
 							add_assoc_bool_ex(*status_array, result_key, result_key_len + 1, 0);
 						}
-					} else if (result == CHKSUM_MISMATCH_DETECTED) {	
-						/*run unlock before doing it again*/	
+					} else if (result == CHKSUM_MISMATCH_DETECTED) {
+						/*run unlock before doing it again*/
 						LogManager::getLogger(result_key)->setCode(DI_CHECKSUM_GET_FAILED_GET);
 						add_assoc_null_ex(chksum_error_retry_hash, result_key, result_key_len+1);
 						add_assoc_bool_ex(*status_array, result_key, result_key_len+1, 0);
@@ -5992,14 +6005,14 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 									sizeof("LOCK_ERROR")-1)) {
 							char *metadata_start = mmc->inbuf + (sizeof("LOCK_ERROR ") - 1);
 							int metadata_len = strlen(mmc->inbuf) - (sizeof("LOCK_ERROR \r\n") - 1);
-							LogManager::getLogger()->setCode(MC_LOCK_ERROR);	
+							LogManager::getLogger()->setCode(MC_LOCK_ERROR);
 							if (metadata_len > 0 && return_metadata) {
 								add_assoc_stringl_ex(return_metadata, tokens[tok_index].value, tokens[tok_index].length + 1,
 										metadata_start, metadata_len, 1);
 							}
 						} else if (mmc_str_left(mmc->inbuf, "NOT_FOUND", strlen(mmc->inbuf),
 									sizeof("NOT_FOUND")-1)) {
-							LogManager::getLogger()->setCode(MC_NOT_FOUND);	
+							LogManager::getLogger()->setCode(MC_NOT_FOUND);
 							//set the status to true if key is not found
 							add_assoc_bool_ex(*status_array, tokens[tok_index].value, tokens[tok_index].length+1, 1);
 						} else {
@@ -6039,27 +6052,27 @@ void php_mmc_getl_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **return_valu
 
 					LogManager::getLogger(result_key)->setResLen(value_len);
 					LogManager::getLogger(result_key)->setFlags(flags);
-					LogManager::getLogger(result_key)->setCas(cas); 		
+					LogManager::getLogger(result_key)->setCas(cas);
 
 					zend_hash_find(Z_ARRVAL_P(zkeys), tokens[tok_index].value, tokens[tok_index].length+1,
 							(void **)&zvalue);
 					if (Z_TYPE_PP(data) == IS_ARRAY) {
 						zend_hash_find(Z_ARRVAL_PP(zvalue), "shardKey", sizeof("shardKey"), (void **)&zshard);
 					} else {
-						zshard = zvalue;	
+						zshard = zvalue;
 					}
 					mmc_prepare_key(*zshard, shard_key, &shard_key_len TSRMLS_CC);
-					cas_key_len = tokens[tok_index].length+shard_key_len+1;	
+					cas_key_len = tokens[tok_index].length+shard_key_len+1;
 					cas_key = new char[cas_key_len];
-					memcpy(cas_key, tokens[tok_index].value, tokens[tok_index].length);		
+					memcpy(cas_key, tokens[tok_index].value, tokens[tok_index].length);
 					memcpy(cas_key+tokens[tok_index].length, shard_key, shard_key_len+1);
 					add_assoc_long_ex(pool->cas_array, cas_key, cas_key_len, cas);
 
-					if (return_flags != NULL) {						
+					if (return_flags != NULL) {
 						add_assoc_long_ex(return_flags, result_key, result_key_len + 1, flags);
 					}
 
-					if (return_cas != NULL) {						
+					if (return_cas != NULL) {
 						add_assoc_long_ex(return_cas, result_key, result_key_len + 1, cas);
 					}
 
@@ -6193,10 +6206,10 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 
 	for (zend_hash_internal_pointer_reset(key_hash);zend_hash_has_more_elements(key_hash) == SUCCESS;
 			zend_hash_move_forward(key_hash)) {
-		ulong idx;	
+		ulong idx;
 		if (zend_hash_get_current_key_ex(key_hash, &key, &key_len,
 					&idx, 0, NULL) == HASH_KEY_IS_STRING) {
-			zval **zvalue;	
+			zval **zvalue;
 			cas_len = 0;
 			cas_key = NULL;
 			LogManager::createLogger(key);
@@ -6207,7 +6220,7 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 			if (zend_hash_get_current_data(key_hash, (void **)&data) == FAILURE) {
 				add_assoc_bool(*status_array, key, 0);
 				LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
-				continue;	
+				continue;
 			}
 
 			if (Z_TYPE_PP(data) == IS_ARRAY) {
@@ -6219,8 +6232,8 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 					LogManager::getLogger()->setCode(VALUE_NOT_FOUND);
 					continue;
 				} else {
-					mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);	
-				}	
+					mmc_prepare_key(*zvalue, shard_key, &shard_key_len TSRMLS_CC);
+				}
 
 				if (zend_hash_find(value_hash, "cas", sizeof("cas"),
 							(void **)&zvalue) == SUCCESS) {
@@ -6245,7 +6258,7 @@ void php_mmc_unlock_multi_by_key(mmc_pool_t *pool, zval *zkeys, zval **status_ar
 				if (cas_len == 0) {
 					cas_key_len = shard_key_len+key_len;
 					cas_key = new char[cas_key_len];
-					memcpy(cas_key, key, key_len-1);		
+					memcpy(cas_key, key, key_len-1);
 					memcpy(cas_key+key_len-1, shard_key, shard_key_len+1);
 
 					if (pool->cas_array && FAILURE != zend_hash_find(Z_ARRVAL_P(pool->cas_array),
@@ -6717,7 +6730,7 @@ PHP_FUNCTION(memcache_get_stats)
 	long slabid = 0, limit = MMC_DEFAULT_CACHEDUMP_LIMIT;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("getstats");
 
 	if (mmc_object == NULL) {
@@ -6778,7 +6791,7 @@ PHP_FUNCTION(memcache_get_extended_stats)
 
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("getextendedstats");
 
 	if (mmc_object == NULL) {
@@ -6838,7 +6851,7 @@ PHP_FUNCTION(memcache_set_compress_threshold)
 	double min_savings = MMC_DEFAULT_SAVINGS;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("setcompressthreshold");
 
 	if (mmc_object == NULL) {
@@ -6896,7 +6909,7 @@ PHP_FUNCTION(memcache_increment) {
 	unsigned int key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("increment");
 
 	if (mmc_object == NULL) {
@@ -6953,7 +6966,7 @@ PHP_FUNCTION(memcache_incrementByKey) {
 	unsigned int shard_key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("incrementbykey");
 
 	if (mmc_object == NULL) {
@@ -7004,7 +7017,7 @@ PHP_FUNCTION(memcache_decrement) {
 	unsigned int key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("decrement");
 
 	if (mmc_object == NULL) {
@@ -7061,7 +7074,7 @@ PHP_FUNCTION(memcache_decrementByKey) {
 	unsigned int shard_key_tmp_len;
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("decrementbykey");
 
 	if (mmc_object == NULL) {
@@ -7108,7 +7121,7 @@ PHP_FUNCTION(memcache_close)
 	zval *mmc_object = getThis();
 	mc_logger_t logData;
 	LogManager lm(&logData);
-	
+
 	LogManager::getLogger()->setCmd("close");
 
 	if (mmc_object == NULL) {

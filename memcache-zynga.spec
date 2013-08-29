@@ -5,11 +5,11 @@
 
 %define pecl_name memcache-zynga
 %define module_name memcache
-%define log_dir /etc/pecl-log 
+%define log_dir /etc/pecl-log
 
 Summary:      Memcached extension with custom changes for zynga
 Name:         php-pecl-memcache-zynga
-Version:      2.5.0.8
+Version:      2.5.0.9
 Release:      %{?php_version}
 License:      PHP
 Group:        Development/Languages
@@ -138,7 +138,7 @@ EOF
     notifempty
     missingok
     size 100M
-    compress 
+    compress
     postrotate
         /bin/kill -HUP `cat /var/run/syslogd.pid 2> /dev/null` 2> /dev/null || true
     endscript
@@ -155,15 +155,15 @@ EOF
 if [ -f /etc/syslog-ng/syslog-ng.conf ];then
 sed /pecl_.*log/d /etc/syslog-ng/syslog-ng.conf > /tmp/back
 mv /tmp/back /etc/syslog-ng/syslog-ng.conf
-echo 'destination d_pecl_log { file("/var/log/pecl-memcache.log" owner("root") group ("root") perm(0644) ); }; 
-filter f_pecl_log { facility(local4) and level(debug) and match('pecl-memcache'); };                             
+echo 'destination d_pecl_log { file("/var/log/pecl-memcache.log" owner("root") group ("root") perm(0644) ); };
+filter f_pecl_log { facility(local4) and level(debug) and match('pecl-memcache'); };
 log { source(s_sys); filter(f_pecl_log); destination(d_pecl_log); };
 
-destination d_pecl_apache_log { file("/var/log/pecl-apache.log" owner("root") group ("root") perm(0644) ); }; 
-filter f_pecl_apache_log { facility(local5) and level(debug) and match('pecl-memcache'); };         
+destination d_pecl_apache_log { file("/var/log/pecl-apache.log" owner("root") group ("root") perm(0644) ); };
+filter f_pecl_apache_log { facility(local5) and level(debug) and match('pecl-memcache'); };
 log { source(s_sys); filter(f_pecl_apache_log); destination(d_pecl_apache_log); };' >> /etc/syslog-ng/syslog-ng.conf
 fi
-/sbin/service syslog-ng restart      
+/sbin/service syslog-ng restart
 %endif
 
 
@@ -182,11 +182,15 @@ fi
 %config(noreplace) %{_sysconfdir}/php.d/%{module_name}.ini
 %{php_extdir}/%{module_name}.so
 %{pecl_xmldir}/%{name}.xml
-%{log_dir} 
+%{log_dir}
 /etc/logrotate.d/pecl
 
 
 %changelog
+
+* Thu August 20 2013 <mtaneja@zynga.com> 2.5.0.8
+- Add retry logic to mmc_readline to avoid spurious
+  connection failures
 
 * Tue Jul 03 2012 <vnatarajan@zynga.com> 2.5.0.0
 - Data integrity support
